@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="af">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b1a17">
+<title>Dagboek</title>
+<link rel="manifest" href="./app.webmanifest">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icons/icon.svg">
+<link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+
+<!-- ============ SETUP (first run: Supabase keys) ============ -->
+<section id="screen-setup" class="screen">
+  <div class="card">
+    <h1 class="brand">Dagboek</h1>
+    <p class="muted" data-i18n="setup.intro"></p>
+    <label data-i18n="setup.url"></label>
+    <input id="setup-url" type="url" placeholder="https://xxxxxxxx.supabase.co" autocomplete="off" spellcheck="false">
+    <label data-i18n="setup.anon"></label>
+    <input id="setup-anon" type="text" placeholder="eyJhbGciOi..." autocomplete="off" spellcheck="false">
+    <button id="setup-save" class="primary" data-i18n="setup.save"></button>
+    <p class="hint" data-i18n="setup.hint"></p>
+  </div>
+</section>
+
+<!-- ============ LOGIN ============ -->
+<section id="screen-auth" class="screen">
+  <div class="card">
+    <h1 class="brand">Dagboek</h1>
+    <p class="muted" data-i18n="auth.intro"></p>
+    <label data-i18n="auth.email"></label>
+    <input id="auth-email" type="email" inputmode="email" autocomplete="email" placeholder="jy@voorbeeld.co.za">
+    <button id="auth-send" class="primary" data-i18n="auth.send"></button>
+    <p id="auth-msg" class="hint"></p>
+    <button id="auth-reset" class="link small" data-i18n="auth.changeProject"></button>
+  </div>
+</section>
+
+<!-- ============ APP ============ -->
+<section id="screen-app" class="screen">
+
+  <header class="topbar">
+    <button id="nav-today" class="tab is-active" data-i18n="nav.today"></button>
+    <button id="nav-list" class="tab" data-i18n="nav.entries"></button>
+    <div class="spacer"></div>
+    <button id="lang-toggle" class="lang" title="Afrikaans / English">AF</button>
+    <button id="nav-settings" class="icon" title="Settings" aria-label="Settings">⚙</button>
+  </header>
+
+  <!-- ---- TODAY / EDITOR ---- -->
+  <main id="view-today" class="view">
+    <div class="datebar">
+      <button id="date-prev" class="icon" aria-label="Vorige">‹</button>
+      <input id="entry-date" type="date">
+      <button id="date-next" class="icon" aria-label="Volgende">›</button>
+    </div>
+
+    <!-- recorder -->
+    <div class="recorder">
+      <button id="rec-btn" class="record" aria-label="Record">
+        <span class="dot"></span>
+      </button>
+      <div class="rec-meta">
+        <div id="rec-label" data-i18n="rec.idle"></div>
+        <div id="rec-time" class="timer">0:00</div>
+      </div>
+      <div class="levels"><div id="rec-level" class="level-fill"></div></div>
+    </div>
+
+    <audio id="audio-play" controls hidden></audio>
+
+    <div id="transcribe-row" class="row" hidden>
+      <button id="btn-transcribe" class="primary" data-i18n="rec.transcribe"></button>
+      <button id="btn-drop-audio" class="link small" data-i18n="rec.discard"></button>
+    </div>
+    <p id="transcribe-status" class="hint"></p>
+
+    <!-- text -->
+    <label data-i18n="entry.text"></label>
+    <textarea id="entry-text" rows="10" placeholder="..."></textarea>
+
+    <!-- location -->
+    <div class="block">
+      <div class="block-head">
+        <span data-i18n="entry.location"></span>
+        <button id="btn-locate" class="link small" data-i18n="entry.getLocation"></button>
+      </div>
+      <div id="loc-view" class="chip-row"></div>
+    </div>
+
+    <!-- photos -->
+    <div class="block">
+      <div class="block-head">
+        <span data-i18n="entry.photos"></span>
+        <label class="link small" for="photo-input" data-i18n="entry.addPhotos"></label>
+        <input id="photo-input" type="file" accept="image/*" multiple hidden>
+      </div>
+      <div id="photo-grid" class="photo-grid"></div>
+    </div>
+
+    <div class="row sticky-save">
+      <button id="btn-save" class="primary" data-i18n="entry.save"></button>
+      <span id="save-status" class="hint"></span>
+    </div>
+    <div class="row">
+      <button id="btn-delete" class="link small danger" data-i18n="entry.delete"></button>
+    </div>
+  </main>
+
+  <!-- ---- LIST ---- -->
+  <main id="view-list" class="view" hidden>
+    <input id="search" type="search" data-i18n-ph="list.search">
+    <div id="entry-list" class="entry-list"></div>
+  </main>
+
+  <!-- ---- SETTINGS ---- -->
+  <main id="view-settings" class="view" hidden>
+    <div class="block">
+      <label data-i18n="set.apikey"></label>
+      <input id="set-openai" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false">
+      <p class="hint" data-i18n="set.apikeyHint"></p>
+    </div>
+
+    <div class="block">
+      <label data-i18n="set.model"></label>
+      <select id="set-model">
+        <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
+        <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
+        <option value="whisper-1">whisper-1</option>
+      </select>
+      <p class="hint" data-i18n="set.modelHint"></p>
+    </div>
+
+    <div class="block">
+      <label data-i18n="set.lang"></label>
+      <select id="set-sttlang">
+        <option value="">— auto (Afrikaans + English) —</option>
+        <option value="af">Afrikaans</option>
+        <option value="en">English</option>
+      </select>
+      <p class="hint" data-i18n="set.langHint"></p>
+    </div>
+
+    <div class="block">
+      <label data-i18n="set.vocab"></label>
+      <textarea id="set-vocab" rows="4" placeholder="Riebeeck-Kasteel, oupa Hennie, bakkie, Nas01, Roberto"></textarea>
+      <p class="hint" data-i18n="set.vocabHint"></p>
+    </div>
+
+    <div class="row">
+      <button id="set-save" class="primary" data-i18n="set.save"></button>
+      <span id="set-status" class="hint"></span>
+    </div>
+
+    <hr>
+    <div class="row">
+      <button id="btn-export" class="link small" data-i18n="set.export"></button>
+      <button id="btn-signout" class="link small danger" data-i18n="set.signout"></button>
+    </div>
+    <p class="hint" id="who"></p>
+  </main>
+
+</section>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

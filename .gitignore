@@ -1,0 +1,12 @@
+.DS_Store
+Thumbs.db
+desktop.ini
+node_modules/
+*.log
+.vscode/
+
+# Nooit sleutels na GitHub toe nie / never push secrets
+API Key/
+*.key
+*secret*
+*api*key*.txt

@@ -1,0 +1,26 @@
+{
+  "name": "Dagboek",
+  "short_name": "Dagboek",
+  "description": "Persoonlike dagboek met stemnotas, fotos en plekke.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#171613",
+  "theme_color": "#171613",
+  "lang": "af",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
