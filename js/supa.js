@@ -26,6 +26,23 @@ export function onAuthChange(cb) {
   supa().auth.onAuthStateChange((_event, session) => cb(session));
 }
 
+export async function signInWithPassword(email, password) {
+  const { error } = await supa().auth.signInWithPassword({ email, password });
+  if (error) throw error;
+}
+
+export async function signUpWithPassword(email, password) {
+  const redirectTo = location.origin + location.pathname;
+  const { data, error } = await supa().auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: redirectTo },
+  });
+  if (error) throw error;
+  // When email confirmation is on, Supabase returns a user but no session.
+  return { needsConfirm: !data.session };
+}
+
 export async function sendMagicLink(email) {
   // Strip any leftover ?code=... so the redirect target stays clean.
   const redirectTo = location.origin + location.pathname;

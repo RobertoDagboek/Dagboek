@@ -40,6 +40,18 @@ step 2 are what protect your data.
 
 If you skip this, the email sign-in link will bounce you to the wrong place.
 
+### After your own account exists: shut the door
+
+This is a diary for one person, so once you have signed up, stop anyone else
+being able to register on your project:
+
+**Authentication → Sign In / Providers → Email** → turn **"Allow new users to
+sign up"** OFF.
+
+Your account keeps working. Nobody can create a second one. Since RLS already
+stops one user reading another's rows this is belt-and-braces, but on a project
+with exactly one legitimate user there is no reason to leave signup open.
+
 ---
 
 ## 2. Get an OpenAI key
@@ -88,14 +100,45 @@ Your app appears at `https://<your-username>.github.io/dagboek/` after a minute 
 
 ## 4. First run
 
-1. Open the site. It asks for the Supabase **URL** and **anon key** from step 1.
-   (Optional: hard-code them once in [js/config.js](js/config.js) under `BUILT_IN`
-   so you never type them again on a new device.)
-2. Enter your email → click the link in the mail that arrives → you're in.
-3. Go to **⚙ Settings**, paste your OpenAI key, and add a **word list**:
+1. Open the site. The Supabase URL and anon key are already baked into
+   [js/config.js](js/config.js), so it goes straight to sign-in.
+2. **First time only:** click *First time? Create an account*, enter your email
+   and a proper password, confirm the email that arrives, then sign in.
+3. **Set a PIN.** This is what you use every day from then on — see below.
+4. Go to **⚙ Settings**, paste your OpenAI key, and add a **word list**:
    names of people, farms, towns, brands you say often, comma separated.
    This is the single biggest accuracy win for proper nouns and a strong accent.
-4. Press the big red button, talk, press it again. The text appears and saves itself.
+5. Press the big red button, talk, press it again. The text appears and saves itself.
+
+---
+
+## How the PIN works
+
+Two different locks, doing two different jobs:
+
+| | |
+|---|---|
+| **Email + password** | The real account. Proves to Supabase that you are you. Typed **once per device**, then the session refreshes itself indefinitely. |
+| **PIN** | The daily lock. Typed every time you open the app. |
+
+The PIN is never stored anywhere, not even as a hash. It is stretched through
+PBKDF2 (300 000 rounds, SHA-256) into an AES-256 key, and that key encrypts a
+known check-word. Right PIN → the check-word decrypts. Wrong PIN → AES-GCM
+refuses outright. That same derived key encrypts your **OpenAI API key** on the
+device, so it is no longer sitting in plain text in browser storage.
+
+Eight wrong tries wipes the PIN and the encrypted key from that device and
+forces a full email sign-in. **Your diary is never touched by this** — the
+entries live in Supabase, so a wiped device loses nothing.
+
+**Be honest about what a PIN can and cannot do.** It stops someone who picks up
+your unlocked phone. It does not stop someone who copies this browser's storage
+off the device and grinds through the combinations offline — 300 000 rounds
+makes that slow, not impossible. **Use 6 digits rather than 4**; it is a
+thousand times more work for an attacker and one extra second for you.
+
+Forgot it? *Forgot your PIN? Sign in by email* on the lock screen, or
+**⚙ Settings → Change PIN** while you are already in.
 
 ---
 
@@ -135,7 +178,8 @@ recorder already uses noise suppression and auto gain.
 ```
 index.html            layout of all three screens
 css/styles.css        light + dark theme
-js/config.js          device settings (Supabase keys, OpenAI key, word list)
+js/config.js          device settings + the PIN lock and encrypted key storage
+js/crypto.js          PBKDF2 + AES-GCM behind the PIN
 js/i18n.js            Afrikaans + English interface text
 js/supa.js            Supabase client, auth, entries, photos, file storage
 js/recorder.js        microphone recording + level meter

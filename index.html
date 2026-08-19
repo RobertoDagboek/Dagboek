@@ -26,16 +26,54 @@
   </div>
 </section>
 
-<!-- ============ LOGIN ============ -->
+<!-- ============ LOGIN (once per device) ============ -->
 <section id="screen-auth" class="screen">
   <div class="card">
     <h1 class="brand">Dagboek</h1>
     <p class="muted" data-i18n="auth.intro"></p>
+
     <label data-i18n="auth.email"></label>
     <input id="auth-email" type="email" inputmode="email" autocomplete="email" placeholder="jy@voorbeeld.co.za">
-    <button id="auth-send" class="primary" data-i18n="auth.send"></button>
+
+    <label data-i18n="auth.password"></label>
+    <input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••••">
+
+    <button id="auth-signin" class="primary" data-i18n="auth.signin"></button>
     <p id="auth-msg" class="hint"></p>
-    <button id="auth-reset" class="link small" data-i18n="auth.changeProject"></button>
+
+    <div class="row">
+      <button id="auth-mode" class="link small" data-i18n="auth.toCreate"></button>
+      <button id="auth-magic" class="link small" data-i18n="auth.magic"></button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PIN LOCK (every time) ============ -->
+<section id="screen-pin" class="screen">
+  <div class="card pin-card">
+    <h1 class="brand">Dagboek</h1>
+    <p id="pin-greet" class="muted"></p>
+    <p id="pin-prompt" class="pin-prompt"></p>
+
+    <div id="pin-dots" class="pin-dots" aria-hidden="true"></div>
+    <p id="pin-msg" class="hint pin-msg"></p>
+
+    <div class="keypad">
+      <button class="key" data-k="1">1</button>
+      <button class="key" data-k="2">2</button>
+      <button class="key" data-k="3">3</button>
+      <button class="key" data-k="4">4</button>
+      <button class="key" data-k="5">5</button>
+      <button class="key" data-k="6">6</button>
+      <button class="key" data-k="7">7</button>
+      <button class="key" data-k="8">8</button>
+      <button class="key" data-k="9">9</button>
+      <button class="key key-alt" data-k="del">⌫</button>
+      <button class="key" data-k="0">0</button>
+      <button class="key key-go" data-k="ok">✓</button>
+    </div>
+
+    <button id="pin-forgot" class="link small" data-i18n="pin.forgot"></button>
   </div>
 </section>
 
@@ -157,6 +195,7 @@
 
     <hr>
     <div class="row">
+      <button id="btn-changepin" class="link small" data-i18n="set.changePin"></button>
       <button id="btn-export" class="link small" data-i18n="set.export"></button>
       <button id="btn-signout" class="link small danger" data-i18n="set.signout"></button>
     </div>

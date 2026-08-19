@@ -1,5 +1,12 @@
-import { settings, saveSettings, hasProject } from './config.js';
+import {
+  settings, saveSettings, hasProject,
+  getLock, setLock, hasLock, clearLock,
+  failedTries, bumpFailedTries, resetFailedTries, MAX_PIN_TRIES,
+  getSecretBox, setSecretBox,
+  setOpenAIKey, openAIKey, forgetOpenAIKey, takeLegacyPlainKey,
+} from './config.js';
 import { t, applyI18n, toggleLang, formatDate } from './i18n.js';
+import { createLock, openLock, encryptWith, decryptWith, cryptoAvailable } from './crypto.js';
 import * as db from './supa.js';
 import { Recorder } from './recorder.js';
 import { transcribe } from './transcribe.js';
@@ -16,6 +23,8 @@ const state = {
   loc: null,          // { lat, lng, place }
   audio: null,        // { blob, ext, seconds } waiting to be uploaded
   recorder: null,
+  cryptoKey: null,    // AES key derived from the PIN, memory only
+  pin: { mode: 'unlock', buffer: '', first: '', busy: false },
 };
 
 /* ============================== boot ============================== */
@@ -36,18 +45,23 @@ async function boot() {
   db.onAuthChange(session => {
     const wasOut = !state.session;
     state.session = session;
-    if (session && wasOut) { show('app'); openDate(state.date); }
-    if (!session) show('auth');
+    if (session && wasOut) askForPin();
+    if (!session) { forgetOpenAIKey(); state.cryptoKey = null; show('auth'); }
   });
 
   if (!state.session) return show('auth');
-  show('app');
-  openDate(state.date);
+  askForPin();
   registerSW();
 }
 
+/** Signed in and unlocked - hand over to the diary itself. */
+function enterApp() {
+  show('app');
+  openDate(state.date);
+}
+
 function show(screen) {
-  ['setup', 'auth', 'app'].forEach(s => {
+  ['setup', 'auth', 'pin', 'app'].forEach(s => {
     $(`screen-${s}`).classList.toggle('is-on', s === screen);
   });
   if (screen === 'app') $('who').textContent = state.session?.user?.email ?? '';
@@ -65,22 +79,73 @@ function wireGlobal() {
     location.reload();
   };
 
-  // --- auth screen
-  $('auth-send').onclick = async () => {
+  // --- auth screen (once per device)
+  $('auth-email').value = settings().email;
+  let creating = false;
+
+  $('auth-mode').onclick = () => {
+    creating = !creating;
+    $('auth-signin').textContent = t(creating ? 'auth.create' : 'auth.signin');
+    $('auth-mode').textContent = t(creating ? 'auth.toSignin' : 'auth.toCreate');
+    $('auth-password').autocomplete = creating ? 'new-password' : 'current-password';
+    $('auth-msg').textContent = '';
+  };
+
+  $('auth-signin').onclick = async () => {
     const email = $('auth-email').value.trim();
-    if (!email) return;
-    $('auth-send').disabled = true;
+    const password = $('auth-password').value;
+    if (!email || !password) return void ($('auth-msg').textContent = t('auth.needBoth'));
+    if (creating && password.length < 8) {
+      return void ($('auth-msg').textContent = t('auth.shortPw'));
+    }
+    $('auth-signin').disabled = true;
+    $('auth-msg').textContent = '';
     try {
+      saveSettings({ email });
+      if (creating) {
+        const { needsConfirm } = await db.signUpWithPassword(email, password);
+        $('auth-msg').textContent = needsConfirm ? t('auth.created') : '';
+      } else {
+        await db.signInWithPassword(email, password);
+      }
+      $('auth-password').value = '';
+      // onAuthChange takes it from here when a session comes back.
+    } catch (e) {
+      $('auth-msg').textContent = e.message;
+    } finally {
+      $('auth-signin').disabled = false;
+    }
+  };
+
+  $('auth-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('auth-signin').click();
+  });
+
+  $('auth-magic').onclick = async () => {
+    const email = $('auth-email').value.trim();
+    if (!email) return void ($('auth-msg').textContent = t('auth.needBoth'));
+    try {
+      saveSettings({ email });
       await db.sendMagicLink(email);
       $('auth-msg').textContent = t('auth.sent');
     } catch (e) {
       $('auth-msg').textContent = e.message;
-    } finally {
-      $('auth-send').disabled = false;
     }
   };
-  $('auth-reset').onclick = () => {
-    saveSettings({ supabaseUrl: '', supabaseAnon: '' });
+
+  // --- PIN screen
+  document.querySelectorAll('.keypad .key').forEach(btn => {
+    btn.onclick = () => pinPress(btn.dataset.k);
+  });
+  document.addEventListener('keydown', e => {
+    if (!$('screen-pin').classList.contains('is-on')) return;
+    if (/^\d$/.test(e.key)) pinPress(e.key);
+    else if (e.key === 'Backspace') pinPress('del');
+    else if (e.key === 'Enter') pinPress('ok');
+  });
+  $('pin-forgot').onclick = async () => {
+    clearLock();
+    await db.signOut();
     location.reload();
   };
 
@@ -112,16 +177,26 @@ function wireGlobal() {
   $('btn-delete').onclick = removeEntry;
 
   // --- settings
-  $('set-save').onclick = () => {
+  $('set-save').onclick = async () => {
     saveSettings({
-      openaiKey: $('set-openai').value.trim(),
       model: $('set-model').value,
       sttLang: $('set-sttlang').value,
       vocab: $('set-vocab').value.trim(),
     });
-    $('set-status').textContent = t('set.saved');
-    setTimeout(() => { $('set-status').textContent = ''; }, 2000);
+    // The API key never goes into settings - it is encrypted under the PIN.
+    const key = $('set-openai').value.trim();
+    try {
+      if (state.cryptoKey) {
+        setSecretBox(key ? await encryptWith(state.cryptoKey, key) : null);
+      }
+      setOpenAIKey(key);
+      $('set-status').textContent = t('set.saved');
+      setTimeout(() => { $('set-status').textContent = ''; }, 2000);
+    } catch (e) {
+      toast(e.message);
+    }
   };
+  $('btn-changepin').onclick = () => askForPin({ changing: true });
   $('btn-signout').onclick = async () => { await db.signOut(); location.reload(); };
   $('btn-export').onclick = exportAll;
 
@@ -146,6 +221,136 @@ function switchView(name) {
   for (const v of ['today', 'list', 'settings']) $(`view-${v}`).hidden = v !== name;
   $('nav-today').classList.toggle('is-active', name === 'today');
   $('nav-list').classList.toggle('is-active', name === 'list');
+}
+
+/* ============================== PIN =============================== */
+
+const PIN_MIN = 4;
+const PIN_MAX = 8;
+
+/** Show the lock screen, in "set a PIN" mode the first time on this device. */
+function askForPin({ changing = false } = {}) {
+  if (!cryptoAvailable()) {
+    // No WebCrypto means no secure context - fall through rather than lock you out.
+    toast(t('pin.noCrypto'));
+    return enterApp();
+  }
+  state.pin = {
+    mode: hasLock() && !changing ? 'unlock' : 'create',
+    buffer: '',
+    first: '',
+    busy: false,
+    changing,
+  };
+  $('pin-greet').textContent = t('pin.greet', { name: settings().ownerName });
+  $('pin-msg').textContent = '';
+  renderPin();
+  show('pin');
+}
+
+function renderPin() {
+  const { mode, buffer } = state.pin;
+  const prompt = mode === 'unlock' ? 'pin.enter' : mode === 'confirm' ? 'pin.confirm' : 'pin.create';
+  $('pin-prompt').textContent = t(prompt);
+
+  const dots = $('pin-dots');
+  dots.innerHTML = '';
+  for (let i = 0; i < PIN_MAX; i++) {
+    const dot = document.createElement('span');
+    dot.className = 'pin-dot' + (i < buffer.length ? ' is-on' : '') + (i < PIN_MIN ? '' : ' is-extra');
+    dots.appendChild(dot);
+  }
+}
+
+function pinPress(k) {
+  const p = state.pin;
+  if (p.busy) return;
+
+  if (k === 'del') {
+    p.buffer = p.buffer.slice(0, -1);
+    return renderPin();
+  }
+  if (k === 'ok') return pinSubmit();
+
+  if (p.buffer.length >= PIN_MAX) return;
+  p.buffer += k;
+  renderPin();
+  // A full-length PIN submits itself, so a 4-digit user never hits the tick.
+  if (p.mode === 'unlock' && p.buffer.length === PIN_MAX) pinSubmit();
+}
+
+async function pinSubmit() {
+  const p = state.pin;
+  const pin = p.buffer;
+
+  if (pin.length < PIN_MIN) {
+    $('pin-msg').textContent = t('pin.tooShort');
+    return;
+  }
+
+  if (p.mode === 'create') {
+    p.first = pin;
+    p.buffer = '';
+    p.mode = 'confirm';
+    $('pin-msg').textContent = '';
+    return renderPin();
+  }
+
+  if (p.mode === 'confirm') {
+    if (pin !== p.first) {
+      p.mode = 'create';
+      p.first = '';
+      p.buffer = '';
+      $('pin-msg').textContent = t('pin.mismatch');
+      return renderPin();
+    }
+    p.busy = true;
+    $('pin-msg').textContent = t('pin.working');
+    try {
+      // Keep whatever key we already hold so changing the PIN does not lose it.
+      const keepKey = openAIKey() || takeLegacyPlainKey();
+      const { key, lock } = await createLock(pin);
+      state.cryptoKey = key;
+      setLock(lock);
+      resetFailedTries();
+      setSecretBox(keepKey ? await encryptWith(key, keepKey) : null);
+      setOpenAIKey(keepKey);
+      $('pin-msg').textContent = '';
+      p.busy = false;
+      if (p.changing) { toast(t('pin.set')); return enterApp(); }
+      return enterApp();
+    } catch (e) {
+      p.busy = false;
+      $('pin-msg').textContent = e.message;
+      return;
+    }
+  }
+
+  // --- unlock
+  p.busy = true;
+  $('pin-msg').textContent = t('pin.working');
+  try {
+    const key = await openLock(pin, getLock());
+    state.cryptoKey = key;
+    resetFailedTries();
+    const box = getSecretBox();
+    setOpenAIKey(box ? await decryptWith(key, box) : '');
+    p.busy = false;
+    enterApp();
+  } catch {
+    p.busy = false;
+    p.buffer = '';
+    const used = bumpFailedTries();
+    const left = MAX_PIN_TRIES - used;
+    if (left <= 0) {
+      clearLock();
+      $('pin-msg').textContent = t('pin.locked');
+      await db.signOut();
+      return setTimeout(() => location.reload(), 2500);
+    }
+    $('pin-msg').textContent = t('pin.wrong', { n: left });
+    renderPin();
+  }
 }
 
 /* ============================= entries ============================ */
@@ -263,7 +468,7 @@ async function toggleRecording() {
       state.audio = result;
       renderAudio();
       // Straight to text - that is the whole point of the daily voice note.
-      if (settings().openaiKey) runTranscribe();
+      if (openAIKey()) runTranscribe();
     }
     return;
   }
@@ -307,7 +512,7 @@ async function renderSavedAudio() {
 
 async function runTranscribe() {
   if (!state.audio) return;
-  if (!settings().openaiKey) return toast(t('rec.noKey'));
+  if (!openAIKey()) return toast(t('rec.noKey'));
 
   $('btn-transcribe').disabled = true;
   $('transcribe-status').textContent = t('rec.working');
@@ -517,7 +722,7 @@ async function renderList() {
 
 function fillSettings() {
   const s = settings();
-  $('set-openai').value = s.openaiKey;
+  $('set-openai').value = openAIKey();
   $('set-model').value = s.model;
   $('set-sttlang').value = s.sttLang;
   $('set-vocab').value = s.vocab;

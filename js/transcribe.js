@@ -1,4 +1,4 @@
-import { settings } from './config.js';
+import { settings, openAIKey } from './config.js';
 
 const ENDPOINT = 'https://api.openai.com/v1/audio/transcriptions';
 const MAX_BYTES = 25 * 1024 * 1024; // OpenAI audio upload limit
@@ -36,7 +36,8 @@ function buildPrompt(vocab) {
  */
 export async function transcribe(blob, ext = 'webm') {
   const s = settings();
-  if (!s.openaiKey) {
+  const apiKey = openAIKey();
+  if (!apiKey) {
     const err = new Error('NO_KEY');
     err.code = 'NO_KEY';
     throw err;
@@ -57,7 +58,7 @@ export async function transcribe(blob, ext = 'webm') {
 
   const res = await fetch(ENDPOINT, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${s.openaiKey}` },
+    headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
   });
 

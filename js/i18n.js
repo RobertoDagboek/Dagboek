@@ -8,11 +8,32 @@ const STRINGS = {
     'setup.save': 'Stoor en gaan voort',
     'setup.hint': 'Kry dit by supabase.com → jou projek → Settings → API.',
 
-    'auth.intro': 'Tik jou e-pos in. Ons stuur ’n aanmeld-skakel - geen wagwoord nodig nie.',
+    'auth.intro': 'Net een keer op hierdie toestel. Daarna teken jy met jou PIN aan.',
     'auth.email': 'E-pos',
-    'auth.send': 'Stuur aanmeld-skakel',
+    'auth.password': 'Wagwoord',
+    'auth.signin': 'Teken aan',
+    'auth.create': 'Skep my rekening',
+    'auth.toCreate': 'Eerste keer? Skep ’n rekening',
+    'auth.toSignin': 'Ek het al ’n rekening',
+    'auth.magic': 'Stuur eerder ’n skakel per e-pos',
     'auth.sent': 'Kyk in jou e-pos en klik die skakel. Jy kan hierdie bladsy oophou.',
+    'auth.created': 'Bevestig jou e-pos, kom dan terug en teken aan.',
+    'auth.needBoth': 'Vul jou e-pos en wagwoord in.',
+    'auth.shortPw': 'Die wagwoord moet minstens 8 karakters wees.',
     'auth.changeProject': 'Verander Supabase projek',
+
+    'pin.greet': 'Welkom terug, {name}',
+    'pin.enter': 'Tik jou PIN',
+    'pin.create': 'Kies ’n PIN vir hierdie toestel',
+    'pin.confirm': 'Tik die PIN weer',
+    'pin.tooShort': 'Ten minste 4 syfers - 6 is veiliger.',
+    'pin.mismatch': 'Die twee PINs stem nie ooreen nie. Begin oor.',
+    'pin.wrong': 'Verkeerde PIN. Nog {n} probeerslae oor.',
+    'pin.locked': 'Te veel verkeerde probeerslae. Teken weer met jou e-pos aan.',
+    'pin.forgot': 'PIN vergeet? Teken met e-pos aan',
+    'pin.set': 'PIN gestoor',
+    'pin.working': 'Besig…',
+    'pin.noCrypto': 'Hierdie blaaier kan nie ’n PIN veilig stoor nie. Gebruik https.',
 
     'nav.today': 'Vandag',
     'nav.entries': 'Inskrywings',
@@ -44,7 +65,7 @@ const STRINGS = {
     'list.noPhoto': 'geen fotos',
 
     'set.apikey': 'OpenAI API sleutel',
-    'set.apikeyHint': 'Word net in hierdie blaaier gestoor, nooit op GitHub of Supabase nie. Kry een by platform.openai.com.',
+    'set.apikeyHint': 'Word met jou PIN geënkripteer en net in hierdie blaaier gestoor - nooit op GitHub of Supabase nie. Kry een by platform.openai.com.',
     'set.model': 'Spraak-model',
     'set.modelHint': 'gpt-4o-transcribe is die akkuraatste met aksente. whisper-1 is die goedkoopste.',
     'set.lang': 'Taal van jou stemnota',
@@ -53,6 +74,7 @@ const STRINGS = {
     'set.vocabHint': 'Name van mense, plekke en woorde wat jy gereeld se, geskei met kommas. Dit help die model baie met jou aksent en eiename.',
     'set.save': 'Stoor instellings',
     'set.saved': 'Gestoor',
+    'set.changePin': 'Verander PIN',
     'set.export': 'Laai alles af (JSON)',
     'set.signout': 'Teken uit',
   },
@@ -64,11 +86,32 @@ const STRINGS = {
     'setup.save': 'Save and continue',
     'setup.hint': 'Find these at supabase.com → your project → Settings → API.',
 
-    'auth.intro': 'Enter your email. We send a sign-in link - no password needed.',
+    'auth.intro': 'Once on this device only. After that you sign in with your PIN.',
     'auth.email': 'Email',
-    'auth.send': 'Send sign-in link',
+    'auth.password': 'Password',
+    'auth.signin': 'Sign in',
+    'auth.create': 'Create my account',
+    'auth.toCreate': 'First time? Create an account',
+    'auth.toSignin': 'I already have an account',
+    'auth.magic': 'Email me a link instead',
     'auth.sent': 'Check your email and click the link. You can leave this page open.',
+    'auth.created': 'Confirm your email, then come back and sign in.',
+    'auth.needBoth': 'Fill in your email and password.',
+    'auth.shortPw': 'The password must be at least 8 characters.',
     'auth.changeProject': 'Change Supabase project',
+
+    'pin.greet': 'Welcome back, {name}',
+    'pin.enter': 'Enter your PIN',
+    'pin.create': 'Choose a PIN for this device',
+    'pin.confirm': 'Enter the PIN again',
+    'pin.tooShort': 'At least 4 digits - 6 is safer.',
+    'pin.mismatch': 'The two PINs do not match. Start again.',
+    'pin.wrong': 'Wrong PIN. {n} tries left.',
+    'pin.locked': 'Too many wrong tries. Sign in with your email again.',
+    'pin.forgot': 'Forgot your PIN? Sign in by email',
+    'pin.set': 'PIN saved',
+    'pin.working': 'Working…',
+    'pin.noCrypto': 'This browser cannot store a PIN safely. Use https.',
 
     'nav.today': 'Today',
     'nav.entries': 'Entries',
@@ -100,7 +143,7 @@ const STRINGS = {
     'list.noPhoto': 'no photos',
 
     'set.apikey': 'OpenAI API key',
-    'set.apikeyHint': 'Stored in this browser only, never on GitHub or Supabase. Get one at platform.openai.com.',
+    'set.apikeyHint': 'Encrypted with your PIN and kept in this browser only - never on GitHub or Supabase. Get one at platform.openai.com.',
     'set.model': 'Speech model',
     'set.modelHint': 'gpt-4o-transcribe is the most accurate with accents. whisper-1 is the cheapest.',
     'set.lang': 'Language of your voice note',
@@ -109,6 +152,7 @@ const STRINGS = {
     'set.vocabHint': 'Names of people, places and words you use often, comma separated. This helps a lot with accents and proper nouns.',
     'set.save': 'Save settings',
     'set.saved': 'Saved',
+    'set.changePin': 'Change PIN',
     'set.export': 'Download everything (JSON)',
     'set.signout': 'Sign out',
   },
@@ -116,8 +160,11 @@ const STRINGS = {
 
 export let lang = settings().lang === 'en' ? 'en' : 'af';
 
-export function t(key) {
-  return STRINGS[lang][key] ?? STRINGS.af[key] ?? key;
+/** t('pin.wrong', { n: 3 }) fills the {n} placeholder. */
+export function t(key, vars) {
+  const s = STRINGS[lang][key] ?? STRINGS.af[key] ?? key;
+  if (!vars) return s;
+  return s.replace(/\{(\w+)\}/g, (m, name) => (name in vars ? vars[name] : m));
 }
 
 export function setLang(next) {

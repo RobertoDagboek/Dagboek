@@ -126,6 +126,52 @@ button {
 .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
 .spacer { flex: 1; }
 
+/* ---------- PIN lock ---------- */
+.pin-card { text-align: center; max-width: 340px; }
+.pin-card .brand { margin-bottom: 10px; }
+.pin-prompt { font-weight: 600; margin: 4px 0 0; }
+.pin-msg { min-height: 20px; }
+
+.pin-dots {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 22px 0 4px;
+}
+.pin-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  transition: background .12s ease, border-color .12s ease, transform .12s ease;
+}
+.pin-dot.is-extra { opacity: .4; }
+.pin-dot.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  opacity: 1;
+  transform: scale(1.12);
+}
+
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+.key {
+  aspect-ratio: 1.35;
+  font-size: 24px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface-2);
+  border-radius: 14px;
+  transition: transform .08s ease, background .12s ease;
+}
+.key:active { transform: scale(.93); background: var(--line); }
+.key-alt { font-size: 20px; color: var(--muted); background: transparent; }
+.key-go { background: var(--accent); color: var(--accent-text); }
+
 /* ---------- topbar ---------- */
 .topbar {
   position: sticky;
