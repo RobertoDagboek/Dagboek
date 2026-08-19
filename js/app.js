@@ -210,7 +210,9 @@ function renderPin() {
 
   $('pin-greet').textContent = unlocking
     ? t('pin.greet', { name: settings().username })
-    : mode === 'create' ? t('pin.greetNew') : '';
+    : mode === 'create' ? t('pin.greetNew')
+    : mode === 'signin' && !settings().username ? t('pin.firstTime')
+    : '';
 
   const prompt = {
     unlock: 'pin.enter', signin: 'pin.signin', create: 'pin.create',
@@ -401,7 +403,8 @@ function loginError(e, creating) {
   const msg = String(e?.message || e);
   if (/already registered|already been registered|User already/i.test(msg)) return t('pin.taken');
   if (/[Ss]ignups? not allowed|signup_disabled/i.test(msg)) return t('pin.signupOff');
-  if (/Invalid login credentials/i.test(msg)) return t('pin.wrongNet');
+  // Supabase deliberately does not say whether it was the name or the PIN.
+  if (/Invalid login credentials/i.test(msg)) return t('pin.noAccount');
   return creating ? msg : `${t('pin.wrongNet')} (${msg})`;
 }
 

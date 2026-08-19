@@ -134,7 +134,16 @@ button {
 
 .pin-user-row { margin: 16px 0 4px; }
 .pin-user-row input { text-align: center; font-size: 17px; }
-.pin-links { justify-content: center; gap: 20px; }
+.pin-links { justify-content: center; gap: 16px; margin-top: 20px; }
+.ghost {
+  padding: 10px 22px;
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 15px;
+}
+.ghost:active { background: var(--surface-2); }
 
 .pin-dots {
   display: flex;
