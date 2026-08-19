@@ -33,10 +33,10 @@ step 2 are what protect your data.
 
 **Authentication → URL Configuration**, set:
 
-- **Site URL**: `https://<your-github-username>.github.io/dagboek/`
-- **Redirect URLs**: add both
-  - `https://<your-github-username>.github.io/dagboek/`
-  - `http://localhost:8080/` (for testing on your PC)
+- **Site URL**: `https://robertodagboek.github.io/Dagboek/`
+- **Redirect URLs**: add
+  - `https://robertodagboek.github.io/Dagboek/`
+  - `http://localhost:8080/` (only if you ever test on the PC)
 
 If you skip this, the email sign-in link will bounce you to the wrong place.
 
