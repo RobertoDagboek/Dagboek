@@ -1,22 +1,24 @@
-// PIN lock built on WebCrypto.
+// Username + PIN, without ever sending a PIN anywhere.
 //
-// The PIN is never stored - not even hashed in the usual sense. It is stretched
-// with PBKDF2 into an AES key, and that key encrypts a known check-word. If the
-// check-word decrypts, the PIN was right; AES-GCM refuses to decrypt with the
-// wrong key, so a wrong PIN throws instead of returning junk.
+// One PBKDF2 pass over (pin, username) produces 64 bytes, split in two:
 //
-// The same derived key encrypts your OpenAI API key at rest, so the PIN does
-// real work rather than just hiding the screen.
+//   bytes 0-31  -> base64 -> the password Supabase actually stores
+//   bytes 32-63 -> an AES-256 key that never leaves this device
 //
-// Honest limit: a short numeric PIN can be brute-forced by someone who copies
-// this browser's storage off the device. The iteration count makes that slow,
-// not impossible. Six digits is meaningfully better than four.
+// So Supabase only ever sees a 44-character high-entropy string. Even if their
+// database leaked, the stored hash is of that, not of a 6-digit number.
+//
+// Honest limit: the PIN is still the only real secret. Someone who knows your
+// username can try PINs against the login endpoint - that is slow and rate
+// limited, but not impossible. Six digits rather than four is the whole
+// difference between 10 000 and 1 000 000 guesses.
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 const ITERATIONS = 300000;
 const CHECK_WORD = 'dagboek-ok';
+const EMAIL_DOMAIN = 'dagboek.local'; // reserved: mail can never route anywhere
 
 export function randomBytes(n) {
   const b = new Uint8Array(n);
@@ -36,15 +38,36 @@ export const b64 = {
   },
 };
 
-async function deriveKey(pin, salt, iterations = ITERATIONS) {
-  const base = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+/** Usernames are matched case- and space-insensitively. */
+export function slugUser(username) {
+  return String(username || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9._-]/g, '');
+}
+
+/**
+ * Turn a username + PIN into everything the app needs.
+ * @returns {Promise<{user: string, email: string, password: string, localKey: CryptoKey}>}
+ */
+export async function deriveCredentials(username, pin) {
+  const user = slugUser(username);
+  if (!user) throw new Error('EMPTY_USER');
+
+  const base = await crypto.subtle.importKey('raw', enc.encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: enc.encode(`dagboek|v2|${user}`), iterations: ITERATIONS, hash: 'SHA-256' },
     base,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
+    512,
+  ));
+
+  const password = b64.encode(bits.slice(0, 32));
+  const localKey = await crypto.subtle.importKey(
+    'raw', bits.slice(32), { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'],
   );
+
+  return { user, email: `${user}@${EMAIL_DOMAIN}`, password, localKey };
 }
 
 export async function encryptWith(key, text) {
@@ -62,27 +85,15 @@ export async function decryptWith(key, box) {
   return dec.decode(pt);
 }
 
-/** Set a brand new PIN. Returns the live key plus the blob to store. */
-export async function createLock(pin) {
-  const salt = randomBytes(16);
-  const key = await deriveKey(pin, salt);
-  return {
-    key,
-    lock: {
-      v: 1,
-      salt: b64.encode(salt),
-      iterations: ITERATIONS,
-      check: await encryptWith(key, CHECK_WORD),
-    },
-  };
+/** Small encrypted token, so a returning PIN can be checked without a network call. */
+export async function makeCheck(key) {
+  return encryptWith(key, CHECK_WORD);
 }
 
-/** Unlock with a PIN. Throws when the PIN is wrong. */
-export async function openLock(pin, lock) {
-  const key = await deriveKey(pin, b64.decode(lock.salt), lock.iterations || ITERATIONS);
-  const word = await decryptWith(key, lock.check); // throws on a wrong PIN
+export async function verifyCheck(key, box) {
+  const word = await decryptWith(key, box); // AES-GCM throws on a wrong key
   if (word !== CHECK_WORD) throw new Error('bad pin');
-  return key;
+  return true;
 }
 
 /** WebCrypto needs a secure context: https, or localhost. */

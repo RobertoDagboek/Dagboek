@@ -26,8 +26,7 @@ const DEFAULTS = {
   sttLang: '',          // '' = auto-detect, so Afrikaans + English can mix
   vocab: '',            // names/places you say often - fed to the model as a hint
   lang: 'af',           // UI language
-  ownerName: 'Roberto', // used for the greeting on the lock screen
-  email: '',            // remembered so you only type it the first time
+  username: '',         // remembered on this device, so you only type the PIN
 };
 
 let cache = null;
@@ -54,6 +53,7 @@ export function hasProject() {
 }
 
 /* ---------------------------- the PIN lock ---------------------------- */
+// { v: 2, user, check: {iv, ct} } - lets a returning PIN be checked offline.
 
 export function getLock() {
   try { return JSON.parse(localStorage.getItem(LOCK_KEY) || 'null'); } catch { return null; }
@@ -64,7 +64,8 @@ export function setLock(lock) {
 }
 
 export function hasLock() {
-  return Boolean(getLock());
+  const l = getLock();
+  return Boolean(l && l.v === 2 && l.check);
 }
 
 /** Wipe the PIN and the encrypted key from this device. Diary data is untouched. */

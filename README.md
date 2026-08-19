@@ -40,17 +40,23 @@ step 2 are what protect your data.
 
 If you skip this, the email sign-in link will bounce you to the wrong place.
 
+### Required: turn email confirmation off
+
+The app signs you in with a **username and a PIN** — there is no mailbox behind
+it, so a confirmation email would never arrive and you would never get in.
+
+**Authentication → Sign In / Providers → Email** → turn **"Confirm email"** OFF.
+
 ### After your own account exists: shut the door
 
-This is a diary for one person, so once you have signed up, stop anyone else
-being able to register on your project:
+This is a diary for one person, so once you have created your account, stop
+anyone else registering on your project:
 
 **Authentication → Sign In / Providers → Email** → turn **"Allow new users to
 sign up"** OFF.
 
-Your account keeps working. Nobody can create a second one. Since RLS already
-stops one user reading another's rows this is belt-and-braces, but on a project
-with exactly one legitimate user there is no reason to leave signup open.
+Your account keeps working. Nobody can create a second one. Turn it back on for
+a minute if you ever need a second account.
 
 ---
 
@@ -101,10 +107,11 @@ Your app appears at `https://<your-username>.github.io/dagboek/` after a minute 
 ## 4. First run
 
 1. Open the site. The Supabase URL and anon key are already baked into
-   [js/config.js](js/config.js), so it goes straight to sign-in.
-2. **First time only:** click *First time? Create an account*, enter your email
-   and a proper password, confirm the email that arrives, then sign in.
-3. **Set a PIN.** This is what you use every day from then on — see below.
+   [js/config.js](js/config.js), so it goes straight to the lock screen.
+2. **First time only:** tap **New account**, type a username, then your PIN
+   twice. That is the whole signup.
+3. On any other device: type the same username and PIN once, and that device
+   remembers you — after that it is just the PIN.
 4. Go to **⚙ Settings**, paste your OpenAI key, and add a **word list**:
    names of people, farms, towns, brands you say often, comma separated.
    This is the single biggest accuracy win for proper nouns and a strong accent.
@@ -112,33 +119,39 @@ Your app appears at `https://<your-username>.github.io/dagboek/` after a minute 
 
 ---
 
-## How the PIN works
+## How the username + PIN login works
 
-Two different locks, doing two different jobs:
+You type a name and a PIN. No email, no password, no confirmation link.
 
-| | |
+Supabase still needs a real account underneath, so the browser builds one for
+you. Your PIN and username go through PBKDF2 (300 000 rounds, SHA-256) and come
+out as 64 bytes, split in half:
+
+| bytes | becomes |
 |---|---|
-| **Email + password** | The real account. Proves to Supabase that you are you. Typed **once per device**, then the session refreshes itself indefinitely. |
-| **PIN** | The daily lock. Typed every time you open the app. |
+| 0–31 | base64 → the 44-character password Supabase actually stores |
+| 32–63 | an AES-256 key that never leaves the device |
 
-The PIN is never stored anywhere, not even as a hash. It is stretched through
-PBKDF2 (300 000 rounds, SHA-256) into an AES-256 key, and that key encrypts a
-known check-word. Right PIN → the check-word decrypts. Wrong PIN → AES-GCM
-refuses outright. That same derived key encrypts your **OpenAI API key** on the
-device, so it is no longer sitting in plain text in browser storage.
+So Supabase never receives your PIN — only a high-entropy string derived from
+it. If their database ever leaked, the attacker gets a hash of *that*, not a
+hash of a 6-digit number. The account's email is `<username>@dagboek.local`,
+a reserved domain that can never route mail anywhere.
 
-Eight wrong tries wipes the PIN and the encrypted key from that device and
-forces a full email sign-in. **Your diary is never touched by this** — the
-entries live in Supabase, so a wiped device loses nothing.
+The device-side half of the key encrypts your **OpenAI API key** at rest, and
+also encrypts a small check-word so a returning PIN can be verified offline —
+opening the app on a device you have already used needs no network at all.
 
-**Be honest about what a PIN can and cannot do.** It stops someone who picks up
-your unlocked phone. It does not stop someone who copies this browser's storage
-off the device and grinds through the combinations offline — 300 000 rounds
-makes that slow, not impossible. **Use 6 digits rather than 4**; it is a
-thousand times more work for an attacker and one extra second for you.
+Eight wrong tries wipes the local lock and makes you type your name again.
+**Your diary is never touched by this** — entries live in Supabase, so a wiped
+device loses nothing.
 
-Forgot it? *Forgot your PIN? Sign in by email* on the lock screen, or
-**⚙ Settings → Change PIN** while you are already in.
+**What a PIN can and cannot do.** Someone who knows your username can try PINs
+against the login endpoint. That is slow and rate-limited, but not impossible.
+**Use 6 digits rather than 4** — the difference between 10 000 and 1 000 000
+guesses, and one extra second for you.
+
+Change it any time under **⚙ Settings → Change PIN**; that updates both halves,
+Supabase side and device side.
 
 ---
 

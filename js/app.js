@@ -3,10 +3,13 @@ import {
   getLock, setLock, hasLock, clearLock,
   failedTries, bumpFailedTries, resetFailedTries, MAX_PIN_TRIES,
   getSecretBox, setSecretBox,
-  setOpenAIKey, openAIKey, forgetOpenAIKey, takeLegacyPlainKey,
+  setOpenAIKey, openAIKey, takeLegacyPlainKey,
 } from './config.js';
 import { t, applyI18n, toggleLang, formatDate } from './i18n.js';
-import { createLock, openLock, encryptWith, decryptWith, cryptoAvailable } from './crypto.js';
+import {
+  deriveCredentials, slugUser, makeCheck, verifyCheck,
+  encryptWith, decryptWith, cryptoAvailable,
+} from './crypto.js';
 import * as db from './supa.js';
 import { Recorder } from './recorder.js';
 import { transcribe } from './transcribe.js';
@@ -42,14 +45,8 @@ async function boot() {
   } catch (e) {
     return show('setup');
   }
-  db.onAuthChange(session => {
-    const wasOut = !state.session;
-    state.session = session;
-    if (session && wasOut) askForPin();
-    if (!session) { forgetOpenAIKey(); state.cryptoKey = null; show('auth'); }
-  });
+  db.onAuthChange(session => { state.session = session; });
 
-  if (!state.session) return show('auth');
   askForPin();
   registerSW();
 }
@@ -61,7 +58,7 @@ function enterApp() {
 }
 
 function show(screen) {
-  ['setup', 'auth', 'pin', 'app'].forEach(s => {
+  ['setup', 'pin', 'app'].forEach(s => {
     $(`screen-${s}`).classList.toggle('is-on', s === screen);
   });
   if (screen === 'app') $('who').textContent = state.session?.user?.email ?? '';
@@ -79,74 +76,23 @@ function wireGlobal() {
     location.reload();
   };
 
-  // --- auth screen (once per device)
-  $('auth-email').value = settings().email;
-  let creating = false;
-
-  $('auth-mode').onclick = () => {
-    creating = !creating;
-    $('auth-signin').textContent = t(creating ? 'auth.create' : 'auth.signin');
-    $('auth-mode').textContent = t(creating ? 'auth.toSignin' : 'auth.toCreate');
-    $('auth-password').autocomplete = creating ? 'new-password' : 'current-password';
-    $('auth-msg').textContent = '';
-  };
-
-  $('auth-signin').onclick = async () => {
-    const email = $('auth-email').value.trim();
-    const password = $('auth-password').value;
-    if (!email || !password) return void ($('auth-msg').textContent = t('auth.needBoth'));
-    if (creating && password.length < 8) {
-      return void ($('auth-msg').textContent = t('auth.shortPw'));
-    }
-    $('auth-signin').disabled = true;
-    $('auth-msg').textContent = '';
-    try {
-      saveSettings({ email });
-      if (creating) {
-        const { needsConfirm } = await db.signUpWithPassword(email, password);
-        $('auth-msg').textContent = needsConfirm ? t('auth.created') : '';
-      } else {
-        await db.signInWithPassword(email, password);
-      }
-      $('auth-password').value = '';
-      // onAuthChange takes it from here when a session comes back.
-    } catch (e) {
-      $('auth-msg').textContent = e.message;
-    } finally {
-      $('auth-signin').disabled = false;
-    }
-  };
-
-  $('auth-password').addEventListener('keydown', e => {
-    if (e.key === 'Enter') $('auth-signin').click();
-  });
-
-  $('auth-magic').onclick = async () => {
-    const email = $('auth-email').value.trim();
-    if (!email) return void ($('auth-msg').textContent = t('auth.needBoth'));
-    try {
-      saveSettings({ email });
-      await db.sendMagicLink(email);
-      $('auth-msg').textContent = t('auth.sent');
-    } catch (e) {
-      $('auth-msg').textContent = e.message;
-    }
-  };
-
-  // --- PIN screen
+  // --- login: username + PIN
   document.querySelectorAll('.keypad .key').forEach(btn => {
     btn.onclick = () => pinPress(btn.dataset.k);
   });
   document.addEventListener('keydown', e => {
     if (!$('screen-pin').classList.contains('is-on')) return;
+    if (document.activeElement === $('pin-user') && e.key !== 'Enter') return;
     if (/^\d$/.test(e.key)) pinPress(e.key);
     else if (e.key === 'Backspace') pinPress('del');
     else if (e.key === 'Enter') pinPress('ok');
   });
-  $('pin-forgot').onclick = async () => {
+  $('pin-newuser').onclick = () => startLogin({ mode: 'create' });
+  $('pin-switch').onclick = async () => {
     clearLock();
+    saveSettings({ username: '' });
     await db.signOut();
-    location.reload();
+    startLogin({ mode: 'signin' });
   };
 
   // --- nav
@@ -196,7 +142,7 @@ function wireGlobal() {
       toast(e.message);
     }
   };
-  $('btn-changepin').onclick = () => askForPin({ changing: true });
+  $('btn-changepin').onclick = () => startLogin({ mode: 'change' });
   $('btn-signout').onclick = async () => { await db.signOut(); location.reload(); };
   $('btn-export').onclick = exportAll;
 
@@ -228,29 +174,48 @@ function switchView(name) {
 const PIN_MIN = 4;
 const PIN_MAX = 8;
 
-/** Show the lock screen, in "set a PIN" mode the first time on this device. */
-function askForPin({ changing = false } = {}) {
+/**
+ * Three ways in, all on one screen:
+ *   unlock  - this device already knows you; the PIN is checked offline
+ *   signin  - name + PIN, verified against Supabase
+ *   create  - name + PIN twice, makes the account
+ */
+function askForPin() {
   if (!cryptoAvailable()) {
-    // No WebCrypto means no secure context - fall through rather than lock you out.
-    toast(t('pin.noCrypto'));
-    return enterApp();
+    // No WebCrypto means no secure context. Say so rather than fail silently.
+    show('pin');
+    $('pin-msg').textContent = t('pin.noCrypto');
+    return;
   }
-  state.pin = {
-    mode: hasLock() && !changing ? 'unlock' : 'create',
-    buffer: '',
-    first: '',
-    busy: false,
-    changing,
-  };
-  $('pin-greet').textContent = t('pin.greet', { name: settings().ownerName });
+  const known = hasLock() && settings().username && state.session;
+  startLogin({ mode: known ? 'unlock' : 'signin' });
+}
+
+function startLogin({ mode }) {
+  state.pin = { mode, buffer: '', first: '', pendingUser: '', busy: false };
   $('pin-msg').textContent = '';
+  $('pin-user').value = mode === 'unlock' ? '' : settings().username;
   renderPin();
   show('pin');
 }
 
 function renderPin() {
   const { mode, buffer } = state.pin;
-  const prompt = mode === 'unlock' ? 'pin.enter' : mode === 'confirm' ? 'pin.confirm' : 'pin.create';
+
+  const unlocking = mode === 'unlock';
+  const changing = mode === 'change' || mode === 'changeConfirm';
+  $('pin-user-row').hidden = unlocking || changing;
+  $('pin-newuser').hidden = mode === 'create' || changing;
+  $('pin-switch').hidden = !unlocking;
+
+  $('pin-greet').textContent = unlocking
+    ? t('pin.greet', { name: settings().username })
+    : mode === 'create' ? t('pin.greetNew') : '';
+
+  const prompt = {
+    unlock: 'pin.enter', signin: 'pin.signin', create: 'pin.create',
+    confirm: 'pin.confirm', change: 'pin.create', changeConfirm: 'pin.confirm',
+  }[mode];
   $('pin-prompt').textContent = t(prompt);
 
   const dots = $('pin-dots');
@@ -275,7 +240,7 @@ function pinPress(k) {
   if (p.buffer.length >= PIN_MAX) return;
   p.buffer += k;
   renderPin();
-  // A full-length PIN submits itself, so a 4-digit user never hits the tick.
+  // A full-length PIN submits itself, so you rarely need the tick.
   if (p.mode === 'unlock' && p.buffer.length === PIN_MAX) pinSubmit();
 }
 
@@ -288,7 +253,14 @@ async function pinSubmit() {
     return;
   }
 
+  // --- first of two entries when making a new account
   if (p.mode === 'create') {
+    const name = slugUser($('pin-user').value);
+    if (!name) {
+      $('pin-msg').textContent = t('pin.needName');
+      return;
+    }
+    p.pendingUser = name;
     p.first = pin;
     p.buffer = '';
     p.mode = 'confirm';
@@ -304,53 +276,133 @@ async function pinSubmit() {
       $('pin-msg').textContent = t('pin.mismatch');
       return renderPin();
     }
+    return finishLogin(p.pendingUser, pin, { creating: true });
+  }
+
+  if (p.mode === 'signin') {
+    const name = slugUser($('pin-user').value);
+    if (!name) {
+      $('pin-msg').textContent = t('pin.needName');
+      return;
+    }
+    return finishLogin(name, pin, { creating: false });
+  }
+
+  // --- changing the PIN of an account already signed in
+  if (p.mode === 'change') {
+    p.first = pin;
+    p.buffer = '';
+    p.mode = 'changeConfirm';
+    $('pin-msg').textContent = '';
+    return renderPin();
+  }
+
+  if (p.mode === 'changeConfirm') {
+    if (pin !== p.first) {
+      p.mode = 'change';
+      p.first = '';
+      p.buffer = '';
+      $('pin-msg').textContent = t('pin.mismatch');
+      return renderPin();
+    }
     p.busy = true;
     $('pin-msg').textContent = t('pin.working');
     try {
-      // Keep whatever key we already hold so changing the PIN does not lose it.
-      const keepKey = openAIKey() || takeLegacyPlainKey();
-      const { key, lock } = await createLock(pin);
-      state.cryptoKey = key;
-      setLock(lock);
+      const username = settings().username;
+      const { password, localKey } = await deriveCredentials(username, pin);
+      await db.updatePassword(password);              // the Supabase side
+      const apiKey = openAIKey();                     // keep the key across the change
+      setLock({ v: 2, user: username, check: await makeCheck(localKey) });
+      setSecretBox(apiKey ? await encryptWith(localKey, apiKey) : null);
+      state.cryptoKey = localKey;
       resetFailedTries();
-      setSecretBox(keepKey ? await encryptWith(key, keepKey) : null);
-      setOpenAIKey(keepKey);
-      $('pin-msg').textContent = '';
       p.busy = false;
-      if (p.changing) { toast(t('pin.set')); return enterApp(); }
+      toast(t('pin.set'));
       return enterApp();
     } catch (e) {
       p.busy = false;
+      p.buffer = '';
       $('pin-msg').textContent = e.message;
-      return;
+      return renderPin();
     }
   }
 
-  // --- unlock
+  // --- unlock: no network, just check the PIN against the stored token
   p.busy = true;
   $('pin-msg').textContent = t('pin.working');
   try {
-    const key = await openLock(pin, getLock());
-    state.cryptoKey = key;
+    const { localKey } = await deriveCredentials(settings().username, pin);
+    await verifyCheck(localKey, getLock().check);
+    state.cryptoKey = localKey;
     resetFailedTries();
     const box = getSecretBox();
-    setOpenAIKey(box ? await decryptWith(key, box) : '');
+    setOpenAIKey(box ? await decryptWith(localKey, box) : '');
     p.busy = false;
     enterApp();
   } catch {
     p.busy = false;
     p.buffer = '';
-    const used = bumpFailedTries();
-    const left = MAX_PIN_TRIES - used;
+    const left = MAX_PIN_TRIES - bumpFailedTries();
     if (left <= 0) {
       clearLock();
-      $('pin-msg').textContent = t('pin.locked');
+      saveSettings({ username: '' });
       await db.signOut();
+      $('pin-msg').textContent = t('pin.locked');
       return setTimeout(() => location.reload(), 2500);
     }
     $('pin-msg').textContent = t('pin.wrong', { n: left });
     renderPin();
   }
+}
+
+/** Sign in or sign up against Supabase using the derived credentials. */
+async function finishLogin(username, pin, { creating }) {
+  const p = state.pin;
+  p.busy = true;
+  $('pin-msg').textContent = t(creating ? 'pin.signup' : 'pin.working');
+  try {
+    const { user, email, password, localKey } = await deriveCredentials(username, pin);
+
+    if (creating) {
+      const { needsConfirm } = await db.signUpWithPassword(email, password);
+      // Email confirmation must be off; without a session there is nothing to do.
+      if (needsConfirm) await db.signInWithPassword(email, password);
+    } else {
+      await db.signInWithPassword(email, password);
+    }
+
+    state.session = await db.getSession();
+    state.cryptoKey = localKey;
+    saveSettings({ username: user });
+    setLock({ v: 2, user, check: await makeCheck(localKey) });
+    resetFailedTries();
+
+    // Carry a key from an older build across, then re-encrypt under this PIN.
+    const existing = openAIKey() || takeLegacyPlainKey();
+    const box = getSecretBox();
+    let apiKey = existing;
+    if (!apiKey && box) {
+      try { apiKey = await decryptWith(localKey, box); } catch { apiKey = ''; }
+    }
+    setSecretBox(apiKey ? await encryptWith(localKey, apiKey) : null);
+    setOpenAIKey(apiKey);
+
+    p.busy = false;
+    enterApp();
+  } catch (e) {
+    p.busy = false;
+    p.buffer = '';
+    $('pin-msg').textContent = loginError(e, creating);
+    renderPin();
+  }
+}
+
+function loginError(e, creating) {
+  const msg = String(e?.message || e);
+  if (/already registered|already been registered|User already/i.test(msg)) return t('pin.taken');
+  if (/[Ss]ignups? not allowed|signup_disabled/i.test(msg)) return t('pin.signupOff');
+  if (/Invalid login credentials/i.test(msg)) return t('pin.wrongNet');
+  return creating ? msg : `${t('pin.wrongNet')} (${msg})`;
 }
 
 /* ============================= entries ============================ */

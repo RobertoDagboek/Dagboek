@@ -26,35 +26,18 @@
   </div>
 </section>
 
-<!-- ============ LOGIN (once per device) ============ -->
-<section id="screen-auth" class="screen">
-  <div class="card">
-    <h1 class="brand">Dagboek</h1>
-    <p class="muted" data-i18n="auth.intro"></p>
-
-    <label data-i18n="auth.email"></label>
-    <input id="auth-email" type="email" inputmode="email" autocomplete="email" placeholder="jy@voorbeeld.co.za">
-
-    <label data-i18n="auth.password"></label>
-    <input id="auth-password" type="password" autocomplete="current-password" placeholder="••••••••••">
-
-    <button id="auth-signin" class="primary" data-i18n="auth.signin"></button>
-    <p id="auth-msg" class="hint"></p>
-
-    <div class="row">
-      <button id="auth-mode" class="link small" data-i18n="auth.toCreate"></button>
-      <button id="auth-magic" class="link small" data-i18n="auth.magic"></button>
-    </div>
-  </div>
-</section>
-
-<!-- ============ PIN LOCK (every time) ============ -->
+<!-- ============ LOGIN: username + PIN, nothing else ============ -->
 <section id="screen-pin" class="screen">
   <div class="card pin-card">
     <h1 class="brand">Dagboek</h1>
     <p id="pin-greet" class="muted"></p>
-    <p id="pin-prompt" class="pin-prompt"></p>
 
+    <div id="pin-user-row" class="pin-user-row">
+      <input id="pin-user" type="text" autocomplete="username" autocapitalize="none"
+             spellcheck="false" data-i18n-ph="pin.namePh">
+    </div>
+
+    <p id="pin-prompt" class="pin-prompt"></p>
     <div id="pin-dots" class="pin-dots" aria-hidden="true"></div>
     <p id="pin-msg" class="hint pin-msg"></p>
 
@@ -73,7 +56,10 @@
       <button class="key key-go" data-k="ok">✓</button>
     </div>
 
-    <button id="pin-forgot" class="link small" data-i18n="pin.forgot"></button>
+    <div class="row pin-links">
+      <button id="pin-newuser" class="link small" data-i18n="pin.toCreate"></button>
+      <button id="pin-switch" class="link small" data-i18n="pin.switchUser"></button>
+    </div>
   </div>
 </section>
 

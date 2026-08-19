@@ -53,6 +53,11 @@ export async function sendMagicLink(email) {
   if (error) throw error;
 }
 
+export async function updatePassword(password) {
+  const { error } = await supa().auth.updateUser({ password });
+  if (error) throw error;
+}
+
 export async function signOut() {
   await supa().auth.signOut();
 }

@@ -132,6 +132,10 @@ button {
 .pin-prompt { font-weight: 600; margin: 4px 0 0; }
 .pin-msg { min-height: 20px; }
 
+.pin-user-row { margin: 16px 0 4px; }
+.pin-user-row input { text-align: center; font-size: 17px; }
+.pin-links { justify-content: center; gap: 20px; }
+
 .pin-dots {
   display: flex;
   justify-content: center;
