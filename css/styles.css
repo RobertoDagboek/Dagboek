@@ -366,6 +366,89 @@ hr { border: none; border-top: 1px solid var(--line); margin: 28px 0; }
 .entry-card .thumbs { display: flex; gap: 5px; margin-top: 10px; }
 .entry-card .thumbs img { width: 46px; height: 46px; object-fit: cover; border-radius: 7px; }
 
+/* ---------- search + tags ---------- */
+.filters { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.filters input { flex: 1; min-width: 0; font-size: 14px; padding: 8px 10px; }
+.filters .link { white-space: nowrap; }
+
+.tag-cloud { margin-top: 12px; }
+.tag-chip { cursor: pointer; font-size: 13px; border: 1px solid transparent; }
+.tag-chip.is-on { background: var(--accent); color: var(--accent-text); }
+
+.card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mini-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.mini-tag.is-on { background: var(--accent); color: var(--accent-text); }
+
+mark {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+/* ---------- video ---------- */
+.photo .play {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(0,0,0,.65);
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.photo.is-open img { cursor: zoom-in; }
+
+.thumbs .thumb { position: relative; display: inline-block; }
+.thumbs .thumb.is-video::after {
+  content: '▶';
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  font-size: 9px;
+  color: #fff;
+  text-shadow: 0 0 4px rgba(0,0,0,.9);
+}
+
+/* ---------- media viewer ---------- */
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0,0,0,.9);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.viewer-body { max-width: 100%; max-height: 100%; }
+.viewer-body img,
+.viewer-body video {
+  max-width: 100%;
+  max-height: 88vh;
+  border-radius: 8px;
+  display: block;
+}
+.viewer-x {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+}
+
 /* ---------- toast ---------- */
 .toast {
   position: fixed;

@@ -15,6 +15,7 @@ import { Recorder } from './recorder.js';
 import { transcribe } from './transcribe.js';
 import { currentPosition, placeName, coordText, mapsLink } from './geo.js';
 import { preparePhoto, localPreview } from './photos.js';
+import { isVideo, readVideo, humanSize, clockTime, MAX_VIDEO_BYTES } from './video.js';
 
 const $ = id => document.getElementById(id);
 
@@ -24,6 +25,8 @@ const state = {
   entry: null,        // row from `entries`, or null when nothing saved yet
   photos: [],         // rows from `entry_photos`
   loc: null,          // { lat, lng, place }
+  tags: [],           // labels on the open entry
+  filter: { tags: [] },
   audio: null,        // { blob, ext, seconds } waiting to be uploaded
   recorder: null,
   cryptoKey: null,    // AES key derived from the PIN, memory only
@@ -118,7 +121,40 @@ function wireGlobal() {
 
   // --- entry actions
   $('btn-locate').onclick = grabLocation;
-  $('photo-input').onchange = e => { addPhotos([...e.target.files]); e.target.value = ''; };
+  $('photo-input').onchange = e => { addMedia([...e.target.files]); e.target.value = ''; };
+  $('video-input').onchange = e => { addMedia([...e.target.files]); e.target.value = ''; };
+
+  $('tag-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addTag($('tag-input').value);
+      $('tag-input').value = '';
+    } else if (e.key === 'Backspace' && !$('tag-input').value && state.tags.length) {
+      state.tags.pop();
+      renderTags();
+    }
+  });
+  $('tag-input').addEventListener('blur', () => {
+    if ($('tag-input').value.trim()) { addTag($('tag-input').value); $('tag-input').value = ''; }
+  });
+
+  // --- list filters
+  $('filter-from').onchange = renderList;
+  $('filter-to').onchange = renderList;
+  $('filter-clear').onclick = () => {
+    $('search').value = '';
+    $('filter-from').value = '';
+    $('filter-to').value = '';
+    state.filter.tags = [];
+    renderList();
+  };
+
+  // --- media viewer
+  $('viewer-close').onclick = closeViewer;
+  $('viewer').onclick = e => { if (e.target === $('viewer')) closeViewer(); };
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('viewer').hidden) closeViewer();
+  });
   $('btn-save').onclick = () => saveEntry({ toastIt: true });
   $('btn-delete').onclick = removeEntry;
 
@@ -418,12 +454,14 @@ async function openDate(date) {
   state.loc = null;
   state.entry = null;
   state.photos = [];
+  state.tags = [];
   renderAudio();
 
   try {
     const row = await db.getEntry(date);
     state.entry = row;
     state.photos = row?.entry_photos ?? [];
+    state.tags = row?.tags ?? [];
     if (row?.lat != null && row?.lng != null) {
       state.loc = { lat: row.lat, lng: row.lng, place: row.place };
     }
@@ -439,8 +477,56 @@ function renderEntry() {
   $('entry-text').placeholder = formatDate(state.date);
   $('btn-delete').hidden = !state.entry;
   renderLocation();
+  renderTags();
   renderPhotos();
   renderSavedAudio();
+  refreshTagOptions();
+}
+
+/* ============================== tags ============================== */
+
+function cleanTag(raw) {
+  return String(raw || '').trim().replace(/^#/, '').replace(/\s+/g, ' ').toLowerCase().slice(0, 40);
+}
+
+function addTag(raw) {
+  for (const part of String(raw).split(',')) {
+    const tag = cleanTag(part);
+    if (tag && !state.tags.includes(tag)) state.tags.push(tag);
+  }
+  renderTags();
+}
+
+function renderTags() {
+  const box = $('tag-view');
+  box.innerHTML = '';
+  for (const tag of state.tags) {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.append(`#${tag}`);
+    const x = document.createElement('button');
+    x.textContent = '×';
+    x.onclick = () => {
+      state.tags = state.tags.filter(t2 => t2 !== tag);
+      renderTags();
+    };
+    chip.appendChild(x);
+    box.appendChild(chip);
+  }
+}
+
+/** Feed the datalist so old tags autocomplete instead of getting re-typed. */
+async function refreshTagOptions() {
+  try {
+    const tags = await db.allTags();
+    const list = $('tag-options');
+    list.innerHTML = '';
+    for (const { tag } of tags) {
+      const opt = document.createElement('option');
+      opt.value = tag;
+      list.appendChild(opt);
+    }
+  } catch { /* autocomplete is a nicety */ }
 }
 
 /** Make sure a row exists so photos have something to hang off. */
@@ -449,6 +535,7 @@ async function ensureEntry() {
   state.entry = await db.upsertEntry({
     entry_date: state.date,
     text: $('entry-text').value,
+    tags: state.tags,
   });
   $('btn-delete').hidden = false;
   return state.entry;
@@ -464,7 +551,7 @@ async function saveEntry({ toastIt = false } = {}) {
       lat: state.loc?.lat ?? null,
       lng: state.loc?.lng ?? null,
       place: state.loc?.place ?? null,
-      updated_at: new Date().toISOString(),
+      tags: state.tags,
     };
     if (state.entry?.id) patch.id = state.entry.id;
 
@@ -631,7 +718,11 @@ function renderLocation() {
 
 /* ============================= photos ============================= */
 
-async function addPhotos(files) {
+function stamp(ext) {
+  return `${Date.now()}-${Math.round(Math.random() * 1e4)}.${ext}`;
+}
+
+async function addMedia(files) {
   if (!files.length) return;
   try {
     await ensureEntry();
@@ -640,49 +731,97 @@ async function addPhotos(files) {
   }
 
   for (const file of files) {
-    const previewUrl = localPreview(file);
-    const node = photoNode({ preview: previewUrl, busy: true });
+    if (isVideo(file) && file.size > MAX_VIDEO_BYTES) {
+      toast(t('entry.tooBig', { size: humanSize(file.size) }));
+      continue;
+    }
+    const previewUrl = isVideo(file) ? '' : localPreview(file);
+    const node = mediaNode({ preview: previewUrl, busy: true, video: isVideo(file) });
     $('photo-grid').appendChild(node);
     try {
-      const prep = await preparePhoto(file);
-      const name = `foto-${Date.now()}-${Math.round(Math.random() * 1e4)}.jpg`;
-      const path = db.userPath(state.session.user.id, state.date, name);
-      await db.uploadFile(path, prep.blob, 'image/jpeg');
-      const row = await db.addPhotoRow({
-        entry_id: state.entry.id,
-        path,
-        width: prep.width,
-        height: prep.height,
-        taken_at: prep.takenAt,
-        lat: prep.lat,
-        lng: prep.lng,
-        sort: state.photos.length,
-      });
+      const row = isVideo(file) ? await uploadVideo(file) : await uploadPhoto(file);
       state.photos.push(row);
-
-      // A photo with GPS fills in the day's location when you have none yet.
-      if (!state.loc && prep.lat != null && prep.lng != null) {
-        state.loc = { lat: prep.lat, lng: prep.lng, place: await placeName(prep.lat, prep.lng) };
-        renderLocation();
-        saveEntry();
-      }
     } catch (e) {
       toast(e.message);
     } finally {
-      URL.revokeObjectURL(previewUrl);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       node.remove();
     }
   }
   renderPhotos();
 }
 
-function photoNode({ preview, busy = false, onRemove }) {
+async function uploadPhoto(file) {
+  const prep = await preparePhoto(file);
+  const path = db.userPath(state.session.user.id, state.date, `foto-${stamp('jpg')}`);
+  await db.uploadFile(path, prep.blob, 'image/jpeg');
+  const row = await db.addPhotoRow({
+    entry_id: state.entry.id,
+    path,
+    kind: 'photo',
+    width: prep.width,
+    height: prep.height,
+    bytes: prep.blob.size,
+    taken_at: prep.takenAt,
+    lat: prep.lat,
+    lng: prep.lng,
+    sort: state.photos.length,
+  });
+
+  // A photo carrying GPS fills in the day's location when you have none yet.
+  if (!state.loc && prep.lat != null && prep.lng != null) {
+    state.loc = { lat: prep.lat, lng: prep.lng, place: await placeName(prep.lat, prep.lng) };
+    renderLocation();
+    saveEntry();
+  }
+  return row;
+}
+
+async function uploadVideo(file) {
+  const meta = await readVideo(file);
+  const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().slice(0, 4);
+  const path = db.userPath(state.session.user.id, state.date, `video-${stamp(ext)}`);
+  await db.uploadFile(path, file, file.type || 'video/mp4');
+
+  let posterPath = null;
+  if (meta.poster) {
+    posterPath = db.userPath(state.session.user.id, state.date, `plakkaat-${stamp('jpg')}`);
+    await db.uploadFile(posterPath, meta.poster, 'image/jpeg');
+  } else {
+    toast(t('entry.noPoster'));
+  }
+
+  return db.addPhotoRow({
+    entry_id: state.entry.id,
+    path,
+    kind: 'video',
+    width: meta.width || null,
+    height: meta.height || null,
+    duration: meta.duration || null,
+    poster_path: posterPath,
+    bytes: file.size,
+    sort: state.photos.length,
+  });
+}
+
+function mediaNode({ preview, busy = false, video = false, duration = 0, onRemove, onOpen }) {
   const div = document.createElement('div');
   div.className = 'photo' + (busy ? ' is-busy' : '');
   const img = document.createElement('img');
   img.src = preview || '';
   img.loading = 'lazy';
   div.appendChild(img);
+
+  if (video) {
+    const badge = document.createElement('span');
+    badge.className = 'play';
+    badge.textContent = duration ? clockTime(duration) : '▶';
+    div.appendChild(badge);
+  }
+  if (onOpen) {
+    div.classList.add('is-open');
+    img.onclick = onOpen;
+  }
   if (onRemove) {
     const x = document.createElement('button');
     x.className = 'x';
@@ -696,42 +835,97 @@ function photoNode({ preview, busy = false, onRemove }) {
 async function renderPhotos() {
   const grid = $('photo-grid');
   grid.innerHTML = '';
-  for (const p of state.photos) {
-    const node = photoNode({
+  for (const m of state.photos) {
+    const isVid = m.kind === 'video';
+    const node = mediaNode({
       preview: '',
-      onRemove: () => removePhoto(p),
+      video: isVid,
+      duration: m.duration,
+      onRemove: () => removeMedia(m),
+      onOpen: () => openViewer(m),
     });
     grid.appendChild(node);
-    db.fileUrl(p.path).then(url => { if (url) node.querySelector('img').src = url; });
+    const thumbPath = isVid ? (m.poster_path || null) : m.path;
+    if (thumbPath) {
+      db.fileUrl(thumbPath).then(url => { if (url) node.querySelector('img').src = url; });
+    }
   }
 }
 
-async function removePhoto(photo) {
+async function removeMedia(media) {
   try {
-    await db.deletePhotoRow(photo.id);
-    await db.removeFiles([photo.path]);
-    state.photos = state.photos.filter(p => p.id !== photo.id);
+    await db.deletePhotoRow(media.id);
+    await db.removeFiles([media.path, media.poster_path]);
+    state.photos = state.photos.filter(p => p.id !== media.id);
     renderPhotos();
   } catch (e) {
     toast(e.message);
   }
 }
 
+/* ============================== viewer ============================ */
+
+async function openViewer(media) {
+  const body = $('viewer-body');
+  body.innerHTML = '';
+  $('viewer').hidden = false;
+  const url = await db.fileUrl(media.path);
+  if (!url) return closeViewer();
+
+  if (media.kind === 'video') {
+    const v = document.createElement('video');
+    v.src = url;
+    v.controls = true;
+    v.autoplay = true;
+    v.playsInline = true;
+    if (media.poster_path) db.fileUrl(media.poster_path).then(p => { if (p) v.poster = p; });
+    body.appendChild(v);
+  } else {
+    const img = document.createElement('img');
+    img.src = url;
+    body.appendChild(img);
+  }
+}
+
+function closeViewer() {
+  const body = $('viewer-body');
+  body.querySelector('video')?.pause();
+  body.innerHTML = '';
+  $('viewer').hidden = true;
+}
+
 /* ============================== list ============================== */
 
 async function renderList() {
   const box = $('entry-list');
-  box.innerHTML = '';
+  const search = $('search').value;
+  const words = db.searchWords(search);
+
   let rows = [];
   try {
-    rows = await db.listEntries({ search: $('search').value });
+    rows = await db.listEntries({
+      search,
+      tags: state.filter.tags,
+      from: $('filter-from').value,
+      to: $('filter-to').value,
+    });
   } catch (e) {
     return toast(e.message);
   }
+
+  await renderTagCloud();
+
+  const filtering = words.length || state.filter.tags.length || $('filter-from').value || $('filter-to').value;
+  $('list-count').textContent = rows.length
+    ? (rows.length === 1 ? t('list.count1') : t('list.count', { n: rows.length }))
+    : '';
+
+  box.innerHTML = '';
   if (!rows.length) {
-    box.innerHTML = `<p class="hint">${t('list.empty')}</p>`;
+    box.innerHTML = `<p class="hint">${filtering ? t('list.nothing') : t('list.empty')}</p>`;
     return;
   }
+
   for (const row of rows) {
     const card = document.createElement('button');
     card.className = 'entry-card';
@@ -752,24 +946,93 @@ async function renderList() {
     if (row.text) {
       const tx = document.createElement('div');
       tx.className = 't';
-      tx.textContent = row.text;
+      fillHighlighted(tx, snippet(row.text, words), words);
       card.appendChild(tx);
     }
 
-    const photos = (row.entry_photos ?? []).slice(0, 4);
-    if (photos.length) {
+    if (row.tags?.length) {
+      const tagRow = document.createElement('div');
+      tagRow.className = 'card-tags';
+      for (const tag of row.tags) {
+        const el = document.createElement('span');
+        el.className = 'mini-tag' + (state.filter.tags.includes(tag) ? ' is-on' : '');
+        el.textContent = `#${tag}`;
+        tagRow.appendChild(el);
+      }
+      card.appendChild(tagRow);
+    }
+
+    const media = (row.entry_photos ?? []).slice(0, 4);
+    if (media.length) {
       const strip = document.createElement('div');
       strip.className = 'thumbs';
       card.appendChild(strip);
-      for (const ph of photos) {
+      for (const m of media) {
+        const wrap = document.createElement('span');
+        wrap.className = 'thumb' + (m.kind === 'video' ? ' is-video' : '');
         const img = document.createElement('img');
         img.loading = 'lazy';
-        strip.appendChild(img);
-        db.fileUrl(ph.path).then(url => { if (url) img.src = url; });
+        wrap.appendChild(img);
+        strip.appendChild(wrap);
+        const p = m.kind === 'video' ? m.poster_path : m.path;
+        if (p) db.fileUrl(p).then(url => { if (url) img.src = url; });
       }
     }
 
     box.appendChild(card);
+  }
+}
+
+/** Show the part of the entry the search actually matched, not just the start. */
+function snippet(text, words, radius = 90) {
+  if (!words.length || text.length <= radius * 2) return text;
+  const hay = text.toLowerCase();
+  let at = -1;
+  for (const w of words) {
+    const i = hay.indexOf(w);
+    if (i !== -1 && (at === -1 || i < at)) at = i;
+  }
+  if (at <= radius) return text;
+  const start = Math.max(0, at - radius);
+  return `…${text.slice(start, start + radius * 3)}`;
+}
+
+function fillHighlighted(el, text, words) {
+  el.textContent = '';
+  if (!words.length) return void (el.textContent = text);
+
+  const re = new RegExp(`(${words.map(escapeRe).join('|')})`, 'gi');
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    if (m.index > last) el.append(text.slice(last, m.index));
+    const mark = document.createElement('mark');
+    mark.textContent = m[0];
+    el.appendChild(mark);
+    last = m.index + m[0].length;
+  }
+  el.append(text.slice(last));
+}
+
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function renderTagCloud() {
+  const cloud = $('tag-cloud');
+  let tags = [];
+  try { tags = await db.allTags(); } catch { return; }
+  cloud.innerHTML = '';
+  for (const { tag, n } of tags) {
+    const btn = document.createElement('button');
+    btn.className = 'chip tag-chip' + (state.filter.tags.includes(tag) ? ' is-on' : '');
+    btn.textContent = `#${tag} ${n}`;
+    btn.onclick = () => {
+      state.filter.tags = state.filter.tags.includes(tag)
+        ? state.filter.tags.filter(x => x !== tag)
+        : [...state.filter.tags, tag];
+      renderList();
+    };
+    cloud.appendChild(btn);
   }
 }
 

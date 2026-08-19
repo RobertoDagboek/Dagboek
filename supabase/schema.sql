@@ -15,6 +15,8 @@ create table if not exists public.entries (
   lat         double precision,
   lng         double precision,
   place       text,
+  tags        text[] not null default '{}',
+  search_blob text,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   unique (user_id, entry_date)
@@ -25,8 +27,12 @@ create table if not exists public.entry_photos (
   user_id    uuid not null default auth.uid() references auth.users (id) on delete cascade,
   entry_id   uuid not null references public.entries (id) on delete cascade,
   path       text not null,
+  kind       text not null default 'photo' check (kind in ('photo', 'video')),
   width      int,
   height     int,
+  duration   real,
+  poster_path text,
+  bytes      bigint,
   taken_at   timestamptz,
   lat        double precision,
   lng        double precision,
@@ -34,8 +40,12 @@ create table if not exists public.entry_photos (
   created_at timestamptz not null default now()
 );
 
+create extension if not exists pg_trgm;
+
 create index if not exists entries_user_date_idx on public.entries (user_id, entry_date desc);
 create index if not exists photos_entry_idx      on public.entry_photos (entry_id);
+create index if not exists entries_tags_idx      on public.entries using gin (tags);
+create index if not exists entries_search_idx    on public.entries using gin (search_blob gin_trgm_ops);
 
 -- ---------- row level security: net jy sien jou eie dagboek ----------
 
@@ -87,16 +97,32 @@ create policy "dagboek delete own" on storage.objects
     bucket_id = 'dagboek' and (storage.foldername(name))[1] = auth.uid()::text
   );
 
--- ---------- updated_at outomaties ----------
+-- ---------- updated_at + soekveld outomaties ----------
+-- search_blob hou teks, plek en etikette saam, sodat een soektog alles dek.
 
-create or replace function public.touch_updated_at()
+create or replace function public.entries_before_write()
 returns trigger language plpgsql as $$
 begin
-  new.updated_at = now();
+  new.updated_at := now();
+  new.search_blob := lower(
+    coalesce(new.text, '') || ' ' ||
+    coalesce(new.place, '') || ' ' ||
+    coalesce(array_to_string(new.tags, ' '), '')
+  );
   return new;
 end $$;
 
-drop trigger if exists entries_touch on public.entries;
-create trigger entries_touch
-  before update on public.entries
-  for each row execute function public.touch_updated_at();
+drop trigger if exists entries_touch        on public.entries;
+drop trigger if exists entries_before_write on public.entries;
+create trigger entries_before_write
+  before insert or update on public.entries
+  for each row execute function public.entries_before_write();
+
+-- ---------- hoeveel plek is op? ----------
+
+create or replace function public.storage_used()
+returns bigint language sql security invoker stable as $$
+  select coalesce(sum(bytes), 0)::bigint
+  from public.entry_photos
+  where user_id = auth.uid();
+$$;

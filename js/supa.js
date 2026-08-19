@@ -64,13 +64,14 @@ export async function signOut() {
 
 /* ----------------------------- entries ---------------------------- */
 
-const ENTRY_COLS = 'id, entry_date, text, audio_path, lat, lng, place, created_at, updated_at';
+const ENTRY_COLS = 'id, entry_date, text, audio_path, lat, lng, place, tags, created_at, updated_at';
+const MEDIA_COLS = 'id, path, kind, width, height, duration, poster_path, bytes, taken_at, lat, lng, sort';
 
-/** The entry for one date, with its photos. Returns null when nothing is written yet. */
+/** The entry for one date, with its photos and clips. Null when nothing is written yet. */
 export async function getEntry(date) {
   const { data, error } = await supa()
     .from('entries')
-    .select(`${ENTRY_COLS}, entry_photos ( id, path, width, height, taken_at, lat, lng, sort )`)
+    .select(`${ENTRY_COLS}, entry_photos ( ${MEDIA_COLS} )`)
     .eq('entry_date', date)
     .maybeSingle();
   if (error) throw error;
@@ -94,19 +95,63 @@ export async function deleteEntry(id) {
   if (error) throw error;
 }
 
-export async function listEntries({ search = '', limit = 200 } = {}) {
+/**
+ * Search the diary.
+ * Every word must appear somewhere in the entry - text, place or tags - which
+ * is what `search_blob` holds. Words may be in any order.
+ *
+ * @param {object} opts
+ * @param {string} opts.search  free text; split on spaces, all words required
+ * @param {string[]} opts.tags  only entries carrying all of these tags
+ * @param {string} opts.from    ISO date, inclusive
+ * @param {string} opts.to      ISO date, inclusive
+ */
+export async function listEntries({ search = '', tags = [], from = '', to = '', limit = 300 } = {}) {
   let q = supa()
     .from('entries')
-    .select(`${ENTRY_COLS}, entry_photos ( id, path, sort )`)
+    .select(`${ENTRY_COLS}, entry_photos ( id, path, kind, poster_path, sort )`)
     .order('entry_date', { ascending: false })
     .limit(limit);
-  if (search.trim()) {
-    const term = `%${search.trim()}%`;
-    q = q.or(`text.ilike.${term},place.ilike.${term}`);
+
+  for (const word of searchWords(search)) {
+    q = q.ilike('search_blob', `%${word}%`);
   }
+  if (tags.length) q = q.contains('tags', tags);
+  if (from) q = q.gte('entry_date', from);
+  if (to) q = q.lte('entry_date', to);
+
   const { data, error } = await q;
   if (error) throw error;
   return data ?? [];
+}
+
+/** Split a query into words, ignoring the PostgREST-special characters. */
+export function searchWords(search) {
+  return String(search || '')
+    .toLowerCase()
+    .split(/\s+/)
+    .map(w => w.replace(/[%,()*]/g, '').trim())
+    .filter(Boolean);
+}
+
+/** Every tag you have ever used, most used first. */
+export async function allTags() {
+  const { data, error } = await supa().from('entries').select('tags');
+  if (error) throw error;
+  const count = new Map();
+  for (const row of data ?? []) {
+    for (const tag of row.tags ?? []) count.set(tag, (count.get(tag) ?? 0) + 1);
+  }
+  return [...count.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([tag, n]) => ({ tag, n }));
+}
+
+/** Bytes of media stored, so the 1GB free tier does not sneak up on you. */
+export async function storageUsed() {
+  const { data, error } = await supa().rpc('storage_used');
+  if (error) return null;
+  return Number(data) || 0;
 }
 
 /* ------------------------------ photos ---------------------------- */

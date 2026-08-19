@@ -115,12 +115,25 @@
       <div id="loc-view" class="chip-row"></div>
     </div>
 
-    <!-- photos -->
+    <!-- tags -->
     <div class="block">
       <div class="block-head">
-        <span data-i18n="entry.photos"></span>
+        <span data-i18n="entry.tags"></span>
+      </div>
+      <div id="tag-view" class="chip-row"></div>
+      <input id="tag-input" type="text" list="tag-options" autocapitalize="none"
+             spellcheck="false" data-i18n-ph="entry.tagPh">
+      <datalist id="tag-options"></datalist>
+    </div>
+
+    <!-- photos and video -->
+    <div class="block">
+      <div class="block-head">
+        <span data-i18n="entry.media"></span>
         <label class="link small" for="photo-input" data-i18n="entry.addPhotos"></label>
+        <label class="link small" for="video-input" data-i18n="entry.addVideo"></label>
         <input id="photo-input" type="file" accept="image/*" multiple hidden>
+        <input id="video-input" type="file" accept="video/*" multiple hidden>
       </div>
       <div id="photo-grid" class="photo-grid"></div>
     </div>
@@ -137,8 +150,24 @@
   <!-- ---- LIST ---- -->
   <main id="view-list" class="view" hidden>
     <input id="search" type="search" data-i18n-ph="list.search">
+
+    <div class="filters">
+      <input id="filter-from" type="date" aria-label="Van">
+      <span class="muted">–</span>
+      <input id="filter-to" type="date" aria-label="Tot">
+      <button id="filter-clear" class="link small" data-i18n="list.clear"></button>
+    </div>
+
+    <div id="tag-cloud" class="chip-row tag-cloud"></div>
+    <p id="list-count" class="hint"></p>
     <div id="entry-list" class="entry-list"></div>
   </main>
+
+  <!-- ---- media viewer ---- -->
+  <div id="viewer" class="viewer" hidden>
+    <button id="viewer-close" class="viewer-x" aria-label="Close">×</button>
+    <div id="viewer-body" class="viewer-body"></div>
+  </div>
 
   <!-- ---- SETTINGS ---- -->
   <main id="view-settings" class="view" hidden>

@@ -7,6 +7,9 @@ into text automatically. Add photos and a location. Everything is yours and priv
   mixed in the same sentence** and a South African accent.
 - **Photos** get resized in the browser before upload, and GPS from the photo's EXIF
   fills in the day's location automatically.
+- **Short video clips**, with a poster frame pulled from the video itself.
+- **Tags and search** — label an entry `#werk` or `#verjaarsdag`, then find every
+  entry by tag, by keyword, or by date range.
 - **Location** from your phone/PC, with a readable place name.
 - **AF / EN** toggle for the whole interface.
 - Installable on your phone (PWA), works offline for reading.
@@ -154,6 +157,31 @@ Change it any time under **⚙ Settings → Change PIN**; that updates both halv
 Supabase side and device side.
 
 ---
+
+## Tags, search and video
+
+**Tags** are free text you type under an entry — `werk`, `verjaarsdag`,
+`kaap toe`. They lowercase themselves, autocomplete from tags you have used
+before, and appear as a tappable cloud on the Inskrywings tab.
+
+**Search** matches across the entry text, the place name *and* the tags at once,
+because the database keeps those three joined in one `search_blob` column that a
+trigger maintains. Every word you type must appear somewhere, in any order — so
+`braai kaap` finds the entry that says "braai" in the text and "Kaap" in the
+place. Matches are highlighted, and the snippet jumps to the matching part
+rather than always showing the opening line. Narrow further with the date range
+boxes or by tapping tags.
+
+**Video** is capped at **50 MB per file** — that is Supabase's free-plan limit,
+not mine, and a clip over it is refused with a clear message rather than a
+failed upload. Clips upload as they are (no transcoding; it is far too slow on a
+phone), with a still grabbed from just after the start as the thumbnail. If the
+browser cannot decode the container to grab that frame — some iPhone `.mov`
+files — the clip still uploads and plays, it just shows a blank tile.
+
+Budget: the free tier gives **1 GB total**. Phone clips run roughly 10–25 MB a
+minute, so expect somewhere around 50–80 short clips before you need to prune or
+upgrade. Photos are negligible by comparison at ~200 KB each after resizing.
 
 ## Testing on your own PC first
 
