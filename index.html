@@ -195,6 +195,16 @@
   <!-- ---- SETTINGS ---- -->
   <main id="view-settings" class="view" hidden>
     <div class="block">
+      <label data-i18n="set.username"></label>
+      <input id="set-username" type="text" autocapitalize="none" spellcheck="false"
+             autocomplete="username" data-i18n-ph="pin.namePh">
+      <p class="hint" data-i18n="set.usernameHint"></p>
+      <div class="row">
+        <button id="btn-rename" class="ghost small" data-i18n="set.rename"></button>
+      </div>
+    </div>
+
+    <div class="block">
       <label data-i18n="set.apikey"></label>
       <input id="set-openai" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false">
       <p class="hint" data-i18n="set.apikeyHint"></p>

@@ -27,6 +27,7 @@ const DEFAULTS = {
   vocab: '',            // names/places you say often - fed to the model as a hint
   lang: 'af',           // UI language
   username: '',         // remembered on this device, so you only type the PIN
+  slug: '',             // permanent account id the credentials derive from
 };
 
 let cache = null;

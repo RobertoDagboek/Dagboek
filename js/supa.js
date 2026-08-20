@@ -58,8 +58,55 @@ export async function updatePassword(password) {
   if (error) throw error;
 }
 
+// Note: there is deliberately no email-change helper here. Supabase rejects
+// email changes on this project outright ("Email address ... is invalid",
+// tested against every domain), which is exactly why the username is a handle
+// pointing at a permanent slug rather than part of the address.
+
 export async function signOut() {
   await supa().auth.signOut();
+}
+
+/* ----------------------------- handles ---------------------------- */
+// username -> permanent slug. The slug seeds the login; the username is just
+// a label pointing at it, so renaming never touches the credentials.
+
+/**
+ * Never throws. If migration 004 has not been run the function does not exist,
+ * and a login must still be able to fall back to the pre-004 scheme rather than
+ * locking the owner out of their own diary.
+ */
+export async function slugFor(username) {
+  try {
+    const { data, error } = await supa().rpc('slug_for', { name: username });
+    if (error) return null;
+    return data || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Record (or repair) this account's handle. */
+export async function claimHandle(username, slug) {
+  const { error } = await supa()
+    .from('handles')
+    .upsert({ username, slug }, { onConflict: 'user_id' });
+  if (error) throw error;
+}
+
+/** Rename: one row, no credential change. RLS limits it to your own handle. */
+export async function renameHandle(userId, username) {
+  const { error } = await supa()
+    .from('handles')
+    .update({ username })
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function myHandle() {
+  const { data, error } = await supa().from('handles').select('username, slug').maybeSingle();
+  if (error) return null;
+  return data;
 }
 
 /* ----------------------------- entries ---------------------------- */

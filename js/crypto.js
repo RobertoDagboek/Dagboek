@@ -38,6 +38,15 @@ export const b64 = {
   },
 };
 
+/**
+ * A permanent internal id for an account. The email and password are derived
+ * from this, never from the username - which is why the username can change
+ * later without touching the login.
+ */
+export function newSlug() {
+  return [...randomBytes(10)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 /** Usernames are matched case- and space-insensitively. */
 export function slugUser(username) {
   return String(username || '')

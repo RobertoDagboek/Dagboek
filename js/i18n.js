@@ -78,6 +78,15 @@ const STRINGS = {
     'list.count': '{n} inskrywings',
     'list.count1': '1 inskrywing',
 
+    'set.username': 'Gebruikersnaam',
+    'set.usernameHint': 'Jou naam is net ’n etiket - verander dit vrylik. Jou aanmelding, jou PIN en jou dagboek bly presies soos hulle is. Op ander toestelle sien jy die nuwe naam sodra jy weer oopmaak.',
+    'rename.needsMigration': 'Loop eers migrasie 004 in Supabase se SQL Editor.',
+    'set.rename': 'Verander gebruikersnaam',
+    'rename.same': 'Dis reeds jou naam.',
+    'rename.done': 'Naam verander na {name}',
+    'rename.taken': 'Daardie naam is reeds gebruik. Kies ’n ander een.',
+    'rename.failed': 'Kon nie die naam verander nie. Niks is verander nie. ({msg})',
+
     'set.apikey': 'OpenAI API sleutel',
     'set.apikeyHint': 'Word met jou PIN geënkripteer en net in hierdie blaaier gestoor - nooit op GitHub of Supabase nie. Kry een by platform.openai.com.',
     'set.model': 'Spraak-model',
@@ -169,6 +178,15 @@ const STRINGS = {
     'list.clear': 'Clear filters',
     'list.count': '{n} entries',
     'list.count1': '1 entry',
+
+    'set.username': 'Username',
+    'set.usernameHint': 'Your name is just a label - change it freely. Your login, your PIN and your diary all stay exactly as they are. Other devices pick up the new name next time you open them.',
+    'rename.needsMigration': 'Run migration 004 in the Supabase SQL editor first.',
+    'set.rename': 'Change username',
+    'rename.same': 'That is already your name.',
+    'rename.done': 'Name changed to {name}',
+    'rename.taken': 'That name is already taken. Pick another.',
+    'rename.failed': 'Could not change the name. Nothing was changed. ({msg})',
 
     'set.apikey': 'OpenAI API key',
     'set.apikeyHint': 'Encrypted with your PIN and kept in this browser only - never on GitHub or Supabase. Get one at platform.openai.com.',

@@ -9,7 +9,7 @@ import { t, lang, applyI18n, toggleLang, formatDate } from './i18n.js';
 import { TOPICS, topicLabel, sectionsToText } from './topics.js';
 import { randomQuote } from './quotes.js';
 import {
-  deriveCredentials, slugUser, makeCheck, verifyCheck,
+  deriveCredentials, slugUser, newSlug, makeCheck, verifyCheck,
   encryptWith, decryptWith, cryptoAvailable,
 } from './crypto.js';
 import * as db from './supa.js';
@@ -67,6 +67,15 @@ async function boot() {
 function enterApp() {
   show('app');
   openDate(state.date);
+  // If the name was changed on another device, pick that up quietly.
+  db.myHandle().then(h => {
+    if (h?.username && h.username !== settings().username) {
+      saveSettings({ username: h.username });
+      const lock = getLock();
+      if (lock) setLock({ ...lock, user: h.username });
+    }
+    if (h?.slug && h.slug !== settings().slug) saveSettings({ slug: h.slug });
+  }).catch(() => {});
 }
 
 function show(screen) {
@@ -193,6 +202,14 @@ function wireGlobal() {
     }
   };
   $('btn-changepin').onclick = () => startLogin({ mode: 'change' });
+
+  $('btn-rename').onclick = () => {
+    const wanted = slugUser($('set-username').value);
+    if (!wanted) return void ($('set-status').textContent = t('pin.needName'));
+    if (wanted === settings().username) return void ($('set-status').textContent = t('rename.same'));
+    $('set-status').textContent = t('pin.working');
+    finishRename(wanted);
+  };
   $('btn-signout').onclick = async () => { await db.signOut(); location.reload(); };
   $('btn-export').onclick = exportAll;
 
@@ -247,8 +264,8 @@ function askForPin() {
   startLogin({ mode: known ? 'unlock' : 'signin' });
 }
 
-function startLogin({ mode }) {
-  state.pin = { mode, buffer: '', first: '', pendingUser: '', busy: false };
+function startLogin({ mode, newUser = '' }) {
+  state.pin = { mode, buffer: '', first: '', pendingUser: '', newUser, busy: false };
   $('pin-msg').textContent = '';
   $('pin-user').value = mode === 'unlock' ? '' : settings().username;
   renderPin();
@@ -389,7 +406,7 @@ async function pinSubmit() {
   p.busy = true;
   $('pin-msg').textContent = t('pin.working');
   try {
-    const { localKey } = await deriveCredentials(settings().username, pin);
+    const { localKey } = await deriveCredentials(accountSlug(), pin);
     await verifyCheck(localKey, getLock().check);
     state.cryptoKey = localKey;
     resetFailedTries();
@@ -413,13 +430,70 @@ async function pinSubmit() {
   }
 }
 
+/**
+ * The permanent id this device's credentials derive from. Accounts made before
+ * migration 004 have no slug stored, and for those the username *was* the slug.
+ */
+function accountSlug() {
+  const s = settings();
+  return s.slug || s.username;
+}
+
+/**
+ * Rename. Because the credentials hang off the slug rather than the username,
+ * this is one row in `handles` - no email change, no password change, nothing
+ * touched on this device except the label. Other devices keep working, since
+ * they unlock on the slug.
+ */
+async function finishRename(newUser) {
+  try {
+    const taken = await db.slugFor(newUser);
+    if (taken) return void ($('set-status').textContent = t('rename.taken'));
+
+    await db.renameHandle(state.session.user.id, newUser);
+    saveSettings({ username: newUser });
+
+    const lock = getLock();
+    if (lock) setLock({ ...lock, user: newUser });
+
+    fillSettings();
+    toast(t('rename.done', { name: newUser }));
+    $('set-status').textContent = '';
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (/duplicate|unique/i.test(msg)) {
+      $('set-status').textContent = t('rename.taken');
+    } else if (/relation|does not exist|schema cache/i.test(msg)) {
+      $('set-status').textContent = t('rename.needsMigration');
+    } else {
+      $('set-status').textContent = t('rename.failed', { msg });
+    }
+  }
+}
+
 /** Sign in or sign up against Supabase using the derived credentials. */
 async function finishLogin(username, pin, { creating }) {
   const p = state.pin;
   p.busy = true;
   $('pin-msg').textContent = t(creating ? 'pin.signup' : 'pin.working');
   try {
-    const { user, email, password, localKey } = await deriveCredentials(username, pin);
+    let slug;
+    let legacy = false;
+
+    if (creating) {
+      if (await db.slugFor(username)) throw new Error('USERNAME_TAKEN');
+      slug = newSlug();
+    } else {
+      slug = await db.slugFor(username);
+      if (!slug) {
+        // No handle yet: either an account from before migration 004, where the
+        // username was the slug, or no such account at all. Try the old way.
+        slug = username;
+        legacy = true;
+      }
+    }
+
+    const { email, password, localKey } = await deriveCredentials(slug, pin);
 
     if (creating) {
       const { needsConfirm } = await db.signUpWithPassword(email, password);
@@ -431,8 +505,14 @@ async function finishLogin(username, pin, { creating }) {
 
     state.session = await db.getSession();
     state.cryptoKey = localKey;
-    saveSettings({ username: user });
-    setLock({ v: 2, user, check: await makeCheck(localKey) });
+
+    // Register the handle for a new account, or backfill it for a legacy one.
+    if (creating || legacy) {
+      try { await db.claimHandle(username, slug); } catch { /* not fatal */ }
+    }
+
+    saveSettings({ username, slug });
+    setLock({ v: 2, user: username, check: await makeCheck(localKey) });
     resetFailedTries();
 
     // Carry a key from an older build across, then re-encrypt under this PIN.
@@ -1296,6 +1376,7 @@ async function renderTagCloud() {
 
 function fillSettings() {
   const s = settings();
+  $('set-username').value = s.username;
   $('set-openai').value = openAIKey();
   $('set-model').value = s.model;
   $('set-sttlang').value = s.sttLang;
