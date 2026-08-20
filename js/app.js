@@ -5,7 +5,8 @@ import {
   getSecretBox, setSecretBox,
   setOpenAIKey, openAIKey, takeLegacyPlainKey,
 } from './config.js';
-import { t, applyI18n, toggleLang, formatDate } from './i18n.js';
+import { t, lang, applyI18n, toggleLang, formatDate } from './i18n.js';
+import { TOPICS, topicLabel, sectionsToText } from './topics.js';
 import {
   deriveCredentials, slugUser, makeCheck, verifyCheck,
   encryptWith, decryptWith, cryptoAvailable,
@@ -15,7 +16,10 @@ import { Recorder } from './recorder.js';
 import { transcribe } from './transcribe.js';
 import { currentPosition, placeName, coordText, mapsLink } from './geo.js';
 import { preparePhoto, localPreview } from './photos.js';
-import { isVideo, readVideo, humanSize, clockTime, MAX_VIDEO_BYTES } from './video.js';
+import {
+  isVideo, readVideo, humanSize, clockTime,
+  MAX_VIDEO_BYTES, PART_BYTES, partPaths, partCount, sliceParts, joinParts,
+} from './video.js';
 
 const $ = id => document.getElementById(id);
 
@@ -26,6 +30,8 @@ const state = {
   photos: [],         // rows from `entry_photos`
   loc: null,          // { lat, lng, place }
   tags: [],           // labels on the open entry
+  sections: {},       // { topicId: text } for the open entry
+  topic: TOPICS[0].id, // which topic the recorder is aimed at
   filter: { tags: [] },
   audio: null,        // { blob, ext, seconds } waiting to be uploaded
   recorder: null,
@@ -104,8 +110,11 @@ function wireGlobal() {
   $('nav-settings').onclick = () => { switchView('settings'); fillSettings(); };
   $('lang-toggle').onclick = () => {
     toggleLang();
-    // Re-label only - never touch the textarea, it may hold unsaved typing.
-    $('entry-text').placeholder = formatDate(state.date);
+    // Re-label only - never touch the textareas, they may hold unsaved typing.
+    relabelSections();
+    buildTopicChips();
+    buildTopicFilter();
+    setTopic(state.topic);
     if (!$('view-list').hidden) renderList();
   };
 
@@ -139,10 +148,12 @@ function wireGlobal() {
   });
 
   // --- list filters
+  $('filter-topic').onchange = renderList;
   $('filter-from').onchange = renderList;
   $('filter-to').onchange = renderList;
   $('filter-clear').onclick = () => {
     $('search').value = '';
+    $('filter-topic').value = '';
     $('filter-from').value = '';
     $('filter-to').value = '';
     state.filter.tags = [];
@@ -189,14 +200,18 @@ function wireGlobal() {
     searchTimer = setTimeout(renderList, 250);
   };
 
+  buildSections();
+  buildTopicChips();
+  buildTopicFilter();
+  setTopic(state.topic);
+
   // warn before losing an unsaved recording
   window.addEventListener('beforeunload', e => {
-    if (state.audio || $('entry-text').dataset.dirty === '1') {
+    if (state.audio || dirty) {
       e.preventDefault();
       e.returnValue = '';
     }
   });
-  $('entry-text').addEventListener('input', () => { $('entry-text').dataset.dirty = '1'; });
 }
 
 function switchView(name) {
@@ -472,15 +487,130 @@ async function openDate(date) {
 }
 
 function renderEntry() {
-  $('entry-text').value = state.entry?.text ?? '';
-  $('entry-text').dataset.dirty = '0';
-  $('entry-text').placeholder = formatDate(state.date);
+  // Entries written before topics existed kept everything in `text`; show that
+  // under "Ander" rather than losing sight of it.
+  const sections = { ...(state.entry?.sections ?? {}) };
+  const legacy = state.entry?.text?.trim();
+  if (legacy && !Object.keys(sections).length) sections.ander = legacy;
+  fillSections(sections);
   $('btn-delete').hidden = !state.entry;
   renderLocation();
   renderTags();
   renderPhotos();
   renderSavedAudio();
   refreshTagOptions();
+}
+
+/* ============================ sections ============================ */
+
+let dirty = false;
+const markDirty = () => { dirty = true; };
+
+/** Build one labelled box per topic, plus the chips that aim the recorder. */
+function buildSections() {
+  const wrap = $('sections');
+  wrap.innerHTML = '';
+  for (const topic of TOPICS) {
+    const block = document.createElement('div');
+    block.className = 'section';
+
+    const head = document.createElement('label');
+    head.className = 'section-label';
+    head.dataset.topicLabel = topic.id;
+    head.htmlFor = `sec-${topic.id}`;
+    block.appendChild(head);
+
+    const ta = document.createElement('textarea');
+    ta.id = `sec-${topic.id}`;
+    ta.dataset.topic = topic.id;
+    ta.rows = 2;
+    ta.addEventListener('input', () => { markDirty(); autoGrow(ta); });
+    ta.addEventListener('focus', () => setTopic(topic.id));
+    block.appendChild(ta);
+
+    wrap.appendChild(block);
+  }
+  relabelSections();
+}
+
+function relabelSections() {
+  document.querySelectorAll('[data-topic-label]').forEach(el => {
+    el.textContent = topicLabel(el.dataset.topicLabel, lang);
+  });
+}
+
+function autoGrow(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = `${Math.max(ta.scrollHeight, 48)}px`;
+}
+
+function readSections() {
+  const out = {};
+  for (const topic of TOPICS) {
+    const value = $(`sec-${topic.id}`)?.value.trim() ?? '';
+    if (value) out[topic.id] = value;
+  }
+  return out;
+}
+
+function fillSections(sections) {
+  state.sections = sections || {};
+  for (const topic of TOPICS) {
+    const ta = $(`sec-${topic.id}`);
+    if (!ta) continue;
+    ta.value = state.sections[topic.id] || '';
+    autoGrow(ta);
+  }
+  dirty = false;
+}
+
+function appendToTopic(topicId, text) {
+  const ta = $(`sec-${topicId}`);
+  if (!ta) return;
+  ta.value = ta.value.trim() ? `${ta.value.trim()}\n\n${text}` : text;
+  autoGrow(ta);
+  markDirty();
+  ta.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function buildTopicChips() {
+  const row = $('topic-chips');
+  row.innerHTML = '';
+  for (const topic of TOPICS) {
+    const chip = document.createElement('button');
+    chip.className = 'chip topic-chip' + (topic.id === state.topic ? ' is-on' : '');
+    chip.dataset.topic = topic.id;
+    chip.textContent = topicLabel(topic.id, lang);
+    chip.onclick = () => setTopic(topic.id);
+    row.appendChild(chip);
+  }
+}
+
+function buildTopicFilter() {
+  const sel = $('filter-topic');
+  const keep = sel.value;
+  sel.innerHTML = '';
+  const all = document.createElement('option');
+  all.value = '';
+  all.textContent = t('topic.all');
+  sel.appendChild(all);
+  for (const topic of TOPICS) {
+    const opt = document.createElement('option');
+    opt.value = topic.id;
+    opt.textContent = topicLabel(topic.id, lang);
+    sel.appendChild(opt);
+  }
+  sel.value = keep;
+}
+
+function setTopic(id) {
+  state.topic = id;
+  document.querySelectorAll('.topic-chip').forEach(c => {
+    c.classList.toggle('is-on', c.dataset.topic === id);
+  });
+  if (!state.recorder?.recording) {
+    $('rec-label').textContent = t('rec.for', { topic: topicLabel(id, lang) });
+  }
 }
 
 /* ============================== tags ============================== */
@@ -532,9 +662,11 @@ async function refreshTagOptions() {
 /** Make sure a row exists so photos have something to hang off. */
 async function ensureEntry() {
   if (state.entry?.id) return state.entry;
+  const sections = readSections();
   state.entry = await db.upsertEntry({
     entry_date: state.date,
-    text: $('entry-text').value,
+    sections,
+    text: sectionsToText(sections, lang),
     tags: state.tags,
   });
   $('btn-delete').hidden = false;
@@ -545,9 +677,11 @@ async function saveEntry({ toastIt = false } = {}) {
   $('btn-save').disabled = true;
   $('save-status').textContent = t('entry.saving');
   try {
+    const sections = readSections();
     const patch = {
       entry_date: state.date,
-      text: $('entry-text').value,
+      sections,
+      text: sectionsToText(sections, lang),
       lat: state.loc?.lat ?? null,
       lng: state.loc?.lng ?? null,
       place: state.loc?.place ?? null,
@@ -566,7 +700,7 @@ async function saveEntry({ toastIt = false } = {}) {
 
     state.entry = await db.upsertEntry(patch);
     state.audio = null;
-    $('entry-text').dataset.dirty = '0';
+    dirty = false;
     renderAudio();
     renderSavedAudio();
     $('save-status').textContent = t('entry.saved');
@@ -604,7 +738,7 @@ async function toggleRecording() {
     const result = await state.recorder.stop();
     state.recorder = null;
     btn.classList.remove('is-rec');
-    $('rec-label').textContent = t('rec.done');
+    $('rec-label').textContent = t('rec.for', { topic: topicLabel(state.topic, lang) });
     $('rec-level').style.width = '0%';
     if (result?.blob?.size) {
       state.audio = result;
@@ -660,13 +794,10 @@ async function runTranscribe() {
   $('transcribe-status').textContent = t('rec.working');
   try {
     const text = await transcribe(state.audio.blob, state.audio.ext);
-    if (text) {
-      const box = $('entry-text');
-      box.value = box.value.trim() ? `${box.value.trim()}\n\n${text}` : text;
-      box.dataset.dirty = '1';
-      box.scrollTop = box.scrollHeight;
-    }
-    $('transcribe-status').textContent = '';
+    if (text) appendToTopic(state.topic, text);
+    $('transcribe-status').textContent = text
+      ? t('rec.into', { topic: topicLabel(state.topic, lang) })
+      : '';
     await saveEntry();
   } catch (e) {
     $('transcribe-status').textContent = e.code === 'NO_KEY' ? t('rec.noKey') : e.message;
@@ -732,8 +863,11 @@ async function addMedia(files) {
 
   for (const file of files) {
     if (isVideo(file) && file.size > MAX_VIDEO_BYTES) {
-      toast(t('entry.tooBig', { size: humanSize(file.size) }));
+      toast(t('entry.wayTooBig', { size: humanSize(file.size) }));
       continue;
+    }
+    if (isVideo(file) && file.size > PART_BYTES) {
+      toast(t('entry.bigVideo', { size: humanSize(file.size), n: partCount(file.size) }));
     }
     const previewUrl = isVideo(file) ? '' : localPreview(file);
     const node = mediaNode({ preview: previewUrl, busy: true, video: isVideo(file) });
@@ -781,7 +915,18 @@ async function uploadVideo(file) {
   const meta = await readVideo(file);
   const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().slice(0, 4);
   const path = db.userPath(state.session.user.id, state.date, `video-${stamp(ext)}`);
-  await db.uploadFile(path, file, file.type || 'video/mp4');
+  const type = file.type || 'video/mp4';
+
+  // Anything over the per-file cap goes up as several objects, byte for byte,
+  // and is glued back together at playback time.
+  const parts = sliceParts(file);
+  const paths = partPaths(path, parts.length);
+  for (let i = 0; i < parts.length; i++) {
+    if (parts.length > 1) {
+      toast(t('entry.uploading', { i: i + 1, n: parts.length }));
+    }
+    await db.uploadFile(paths[i], parts[i], type);
+  }
 
   let posterPath = null;
   if (meta.poster) {
@@ -800,6 +945,8 @@ async function uploadVideo(file) {
     duration: meta.duration || null,
     poster_path: posterPath,
     bytes: file.size,
+    part_count: parts.length,
+    mime: type,
     sort: state.photos.length,
   });
 }
@@ -855,7 +1002,7 @@ async function renderPhotos() {
 async function removeMedia(media) {
   try {
     await db.deletePhotoRow(media.id);
-    await db.removeFiles([media.path, media.poster_path]);
+    await db.removeFiles([...partPaths(media.path, media.part_count || 1), media.poster_path]);
     state.photos = state.photos.filter(p => p.id !== media.id);
     renderPhotos();
   } catch (e) {
@@ -865,25 +1012,56 @@ async function removeMedia(media) {
 
 /* ============================== viewer ============================ */
 
+let viewerObjectUrl = null;
+
 async function openViewer(media) {
   const body = $('viewer-body');
   body.innerHTML = '';
   $('viewer').hidden = false;
-  const url = await db.fileUrl(media.path);
-  if (!url) return closeViewer();
 
-  if (media.kind === 'video') {
-    const v = document.createElement('video');
-    v.src = url;
-    v.controls = true;
-    v.autoplay = true;
-    v.playsInline = true;
-    if (media.poster_path) db.fileUrl(media.poster_path).then(p => { if (p) v.poster = p; });
-    body.appendChild(v);
-  } else {
+  if (media.kind !== 'video') {
+    const url = await db.fileUrl(media.path);
+    if (!url) return closeViewer();
     const img = document.createElement('img');
     img.src = url;
     body.appendChild(img);
+    return;
+  }
+
+  const v = document.createElement('video');
+  v.controls = true;
+  v.playsInline = true;
+  if (media.poster_path) db.fileUrl(media.poster_path).then(p => { if (p) v.poster = p; });
+  body.appendChild(v);
+
+  const parts = media.part_count || 1;
+
+  if (parts === 1) {
+    const url = await db.fileUrl(media.path);
+    if (!url) return closeViewer();
+    v.src = url;
+    v.autoplay = true;
+    return;
+  }
+
+  // Split video: every part has to come down before it can play.
+  const note = document.createElement('p');
+  note.className = 'viewer-note';
+  note.textContent = t('entry.joining', { i: 0, n: parts });
+  body.appendChild(note);
+  try {
+    const urls = [];
+    for (const p of partPaths(media.path, parts)) urls.push(await db.fileUrl(p));
+    if (urls.some(u => !u)) throw new Error('missing part');
+    const blob = await joinParts(urls, media.mime || 'video/mp4', (i, n) => {
+      note.textContent = t('entry.joining', { i, n });
+    });
+    viewerObjectUrl = URL.createObjectURL(blob);
+    v.src = viewerObjectUrl;
+    note.remove();
+    v.play().catch(() => {}); // autoplay may be blocked; controls still work
+  } catch (e) {
+    note.textContent = e.message;
   }
 }
 
@@ -891,6 +1069,10 @@ function closeViewer() {
   const body = $('viewer-body');
   body.querySelector('video')?.pause();
   body.innerHTML = '';
+  if (viewerObjectUrl) {
+    URL.revokeObjectURL(viewerObjectUrl);
+    viewerObjectUrl = null;
+  }
   $('viewer').hidden = true;
 }
 
@@ -906,6 +1088,7 @@ async function renderList() {
     rows = await db.listEntries({
       search,
       tags: state.filter.tags,
+      topic: $('filter-topic').value,
       from: $('filter-from').value,
       to: $('filter-to').value,
     });
@@ -915,7 +1098,9 @@ async function renderList() {
 
   await renderTagCloud();
 
-  const filtering = words.length || state.filter.tags.length || $('filter-from').value || $('filter-to').value;
+  const topic = $('filter-topic').value;
+  const filtering = words.length || state.filter.tags.length || topic
+    || $('filter-from').value || $('filter-to').value;
   $('list-count').textContent = rows.length
     ? (rows.length === 1 ? t('list.count1') : t('list.count', { n: rows.length }))
     : '';
@@ -943,10 +1128,18 @@ async function renderList() {
       card.appendChild(p);
     }
 
-    if (row.text) {
+    // Filtering by topic? Then preview that section, not the whole day.
+    const preview = topic ? (row.sections?.[topic] || '') : (row.text || '');
+    if (preview) {
+      if (topic) {
+        const badge = document.createElement('div');
+        badge.className = 'p';
+        badge.textContent = topicLabel(topic, lang);
+        card.appendChild(badge);
+      }
       const tx = document.createElement('div');
       tx.className = 't';
-      fillHighlighted(tx, snippet(row.text, words), words);
+      fillHighlighted(tx, snippet(preview, words), words);
       card.appendChild(tx);
     }
 

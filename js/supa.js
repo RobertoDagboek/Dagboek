@@ -64,8 +64,8 @@ export async function signOut() {
 
 /* ----------------------------- entries ---------------------------- */
 
-const ENTRY_COLS = 'id, entry_date, text, audio_path, lat, lng, place, tags, created_at, updated_at';
-const MEDIA_COLS = 'id, path, kind, width, height, duration, poster_path, bytes, taken_at, lat, lng, sort';
+const ENTRY_COLS = 'id, entry_date, text, sections, audio_path, lat, lng, place, tags, created_at, updated_at';
+const MEDIA_COLS = 'id, path, kind, width, height, duration, poster_path, bytes, part_count, mime, taken_at, lat, lng, sort';
 
 /** The entry for one date, with its photos and clips. Null when nothing is written yet. */
 export async function getEntry(date) {
@@ -106,15 +106,22 @@ export async function deleteEntry(id) {
  * @param {string} opts.from    ISO date, inclusive
  * @param {string} opts.to      ISO date, inclusive
  */
-export async function listEntries({ search = '', tags = [], from = '', to = '', limit = 300 } = {}) {
+export async function listEntries({ search = '', tags = [], topic = '', from = '', to = '', limit = 300 } = {}) {
   let q = supa()
     .from('entries')
     .select(`${ENTRY_COLS}, entry_photos ( id, path, kind, poster_path, sort )`)
     .order('entry_date', { ascending: false })
     .limit(limit);
 
-  for (const word of searchWords(search)) {
-    q = q.ilike('search_blob', `%${word}%`);
+  const words = searchWords(search);
+
+  if (topic) {
+    // Restrict to one section: the words must be inside that section's text,
+    // and the section must exist at all.
+    q = q.not(`sections->>${topic}`, 'is', null);
+    for (const word of words) q = q.ilike(`sections->>${topic}`, `%${word}%`);
+  } else {
+    for (const word of words) q = q.ilike('search_blob', `%${word}%`);
   }
   if (tags.length) q = q.contains('tags', tags);
   if (from) q = q.gte('entry_date', from);

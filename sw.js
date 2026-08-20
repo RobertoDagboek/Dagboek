@@ -1,8 +1,8 @@
-// Network-first for the app shell: you always get the newest version when
+﻿// Network-first for the app shell: you always get the newest version when
 // online, and the last-known copy when you are not. Cross-origin calls
 // (Supabase, OpenAI, the CDN) are never touched.
 
-const CACHE = 'dagboek-v3';
+const CACHE = 'dagboek-v4';
 const SHELL = [
   './',
   './index.html',
@@ -18,6 +18,7 @@ const SHELL = [
   './js/exif.js',
   './js/photos.js',
   './js/video.js',
+  './js/topics.js',
   './icons/icon.svg',
 ];
 

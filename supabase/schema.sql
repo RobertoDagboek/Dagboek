@@ -16,6 +16,7 @@ create table if not exists public.entries (
   lng         double precision,
   place       text,
   tags        text[] not null default '{}',
+  sections    jsonb not null default '{}'::jsonb,
   search_blob text,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
@@ -33,6 +34,8 @@ create table if not exists public.entry_photos (
   duration   real,
   poster_path text,
   bytes      bigint,
+  part_count int not null default 1 check (part_count >= 1),
+  mime       text,
   taken_at   timestamptz,
   lat        double precision,
   lng        double precision,
@@ -102,12 +105,20 @@ create policy "dagboek delete own" on storage.objects
 
 create or replace function public.entries_before_write()
 returns trigger language plpgsql as $$
+declare
+  section_text text;
 begin
   new.updated_at := now();
+
+  select coalesce(string_agg(value, ' '), '')
+    into section_text
+    from jsonb_each_text(coalesce(new.sections, '{}'::jsonb));
+
   new.search_blob := lower(
     coalesce(new.text, '') || ' ' ||
     coalesce(new.place, '') || ' ' ||
-    coalesce(array_to_string(new.tags, ' '), '')
+    coalesce(array_to_string(new.tags, ' '), '') || ' ' ||
+    section_text
   );
   return new;
 end $$;

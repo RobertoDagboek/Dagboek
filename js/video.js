@@ -4,8 +4,48 @@
 // as they are, with a hard size check first, plus a poster frame grabbed from
 // the first moment so the grid still looks like a grid.
 
-export const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // Supabase free plan, per file
+export const PART_BYTES = 45 * 1024 * 1024;       // safely under Supabase's 50MB cap
+export const MAX_VIDEO_BYTES = 600 * 1024 * 1024; // sanity ceiling; storage is the real limit
 export const POSTER_EDGE = 640;
+
+/**
+ * A video over the per-file cap is stored as several objects and joined back
+ * together when you play it. The bytes are untouched, so the rejoined file is
+ * identical - this is NOT cutting the video into two playable clips, which
+ * would need re-encoding.
+ */
+export function partPaths(basePath, count) {
+  return Array.from({ length: count }, (_, i) => (i === 0 ? basePath : `${basePath}.p${i}`));
+}
+
+export function partCount(size) {
+  return Math.max(1, Math.ceil(size / PART_BYTES));
+}
+
+export function sliceParts(file) {
+  const parts = [];
+  for (let start = 0; start < file.size; start += PART_BYTES) {
+    parts.push(file.slice(start, Math.min(start + PART_BYTES, file.size)));
+  }
+  return parts.length ? parts : [file];
+}
+
+/**
+ * Download every part and glue them back into one blob.
+ * @param {string[]} urls    signed URLs, in order
+ * @param {string} type      the original MIME type
+ * @param {(done:number,total:number)=>void} [onProgress]
+ */
+export async function joinParts(urls, type, onProgress) {
+  const buffers = [];
+  for (let i = 0; i < urls.length; i++) {
+    const res = await fetch(urls[i]);
+    if (!res.ok) throw new Error(`part ${i + 1}/${urls.length}: HTTP ${res.status}`);
+    buffers.push(await res.arrayBuffer());
+    onProgress?.(i + 1, urls.length);
+  }
+  return new Blob(buffers, { type: type || 'video/mp4' });
+}
 
 export function isVideo(file) {
   return file.type.startsWith('video/');

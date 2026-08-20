@@ -82,6 +82,9 @@
       <button id="date-next" class="icon" aria-label="Volgende">›</button>
     </div>
 
+    <!-- which topic am I talking about? -->
+    <div id="topic-chips" class="chip-row topic-chips"></div>
+
     <!-- recorder -->
     <div class="recorder">
       <button id="rec-btn" class="record" aria-label="Record">
@@ -102,9 +105,8 @@
     </div>
     <p id="transcribe-status" class="hint"></p>
 
-    <!-- text -->
-    <label data-i18n="entry.text"></label>
-    <textarea id="entry-text" rows="10" placeholder="..."></textarea>
+    <!-- one block per topic, built from js/topics.js -->
+    <div id="sections" class="sections"></div>
 
     <!-- location -->
     <div class="block">
@@ -152,6 +154,7 @@
     <input id="search" type="search" data-i18n-ph="list.search">
 
     <div class="filters">
+      <select id="filter-topic" aria-label="Onderwerp"></select>
       <input id="filter-from" type="date" aria-label="Van">
       <span class="muted">–</span>
       <input id="filter-to" type="date" aria-label="Tot">

@@ -158,6 +158,27 @@ Supabase side and device side.
 
 ---
 
+## The daily entry is split into topics
+
+Each day has one box per topic, defined in [js/topics.js](js/topics.js):
+
+Werk · Buite werk · Waaraan ek werk · Hoe ek voel · Wat ek deesdae dink ·
+Persoonlike vordering · Ander
+
+**Rename any label freely** — one edit in that file changes the editor, the
+search filter and the export together. Do **not** change an `id`, though: the
+ids are the keys the text is stored under, so renaming one orphans whatever was
+already written there.
+
+The row of chips above the record button decides where a voice note lands. Tap
+**Hoe ek voel**, record, and the transcript appends to that box. Tapping into a
+box directly also aims the recorder at it.
+
+Stored as a `sections` JSON column. The old flat `text` column is kept in step
+as a rendered version of all the topics, so exports and old entries still read
+properly — and an entry written before topics existed shows up under **Ander**
+rather than vanishing.
+
 ## Tags, search and video
 
 **Tags** are free text you type under an entry — `werk`, `verjaarsdag`,
@@ -172,16 +193,36 @@ place. Matches are highlighted, and the snippet jumps to the matching part
 rather than always showing the opening line. Narrow further with the date range
 boxes or by tapping tags.
 
-**Video** is capped at **50 MB per file** — that is Supabase's free-plan limit,
-not mine, and a clip over it is refused with a clear message rather than a
-failed upload. Clips upload as they are (no transcoding; it is far too slow on a
-phone), with a still grabbed from just after the start as the thumbnail. If the
-browser cannot decode the container to grab that frame — some iPhone `.mov`
-files — the clip still uploads and plays, it just shows a blank tile.
+**Search by topic** with the dropdown: pick *Hoe ek voel* and your words are
+matched inside that section only, and the result card previews that section
+instead of the whole day. Leave it on *Alle onderwerpe* to search everything.
+
+**Video** uploads as it is — no transcoding, which is far too slow on a phone —
+with a still grabbed from just after the start as the thumbnail. If the browser
+cannot decode the container to grab that frame (some iPhone `.mov` files) the
+clip still uploads and plays, it just shows a blank tile.
+
+### Videos larger than 50 MB
+
+Supabase's free plan refuses any single object over 50 MB. A bigger clip is
+therefore stored as **several objects of 45 MB**, byte for byte, and glued back
+together in the browser when you play it (`part_count` records how many).
+
+Be clear about what this is and is not:
+
+- It is **not** cutting the video into two playable clips. Slicing an MP4 at an
+  arbitrary byte offset gives two broken files. This splits the *bytes* for
+  storage and rejoins them before playback, so the file that plays is identical
+  to the one you uploaded.
+- A split clip has to **download completely before it starts playing** — no
+  streaming, no seeking ahead. A 150 MB video on a phone means a real wait and a
+  real chunk of memory. Short clips stay single-file and play instantly.
+- The hard ceiling is 600 MB, purely as a sanity guard.
 
 Budget: the free tier gives **1 GB total**. Phone clips run roughly 10–25 MB a
-minute, so expect somewhere around 50–80 short clips before you need to prune or
-upgrade. Photos are negligible by comparison at ~200 KB each after resizing.
+minute, so expect around 50–80 short clips before you need to prune or upgrade —
+and only a handful if they are large ones. Photos are negligible by comparison
+at ~200 KB each after resizing.
 
 ## Testing on your own PC first
 

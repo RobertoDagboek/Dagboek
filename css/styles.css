@@ -283,6 +283,33 @@ button {
 
 audio { width: 100%; margin-top: 14px; }
 
+/* ---------- topic sections ---------- */
+.topic-chips { margin-bottom: 14px; }
+.topic-chip {
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid transparent;
+  color: var(--muted);
+}
+.topic-chip.is-on {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.sections { margin-top: 22px; }
+.section + .section { margin-top: 16px; }
+.section-label {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 12px;
+}
+.section textarea {
+  min-height: 48px;
+  overflow: hidden;
+  resize: none;
+}
+
 /* ---------- blocks ---------- */
 .block { margin-top: 22px; }
 .block-head {
@@ -368,7 +395,9 @@ hr { border: none; border-top: 1px solid var(--line); margin: 28px 0; }
 
 /* ---------- search + tags ---------- */
 .filters { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.filters input { flex: 1; min-width: 0; font-size: 14px; padding: 8px 10px; }
+.filters input,
+.filters select { flex: 1; min-width: 0; font-size: 14px; padding: 8px 10px; }
+.filters select { flex: 1 1 100%; }
 .filters .link { white-space: nowrap; }
 
 .tag-cloud { margin-top: 12px; }
@@ -435,6 +464,12 @@ mark {
   max-height: 88vh;
   border-radius: 8px;
   display: block;
+}
+.viewer-note {
+  color: #fff;
+  text-align: center;
+  font-size: 14px;
+  margin-top: 14px;
 }
 .viewer-x {
   position: absolute;
