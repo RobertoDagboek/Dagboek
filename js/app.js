@@ -7,6 +7,7 @@ import {
 } from './config.js';
 import { t, lang, applyI18n, toggleLang, formatDate } from './i18n.js';
 import { TOPICS, topicLabel, sectionsToText } from './topics.js';
+import { randomQuote } from './quotes.js';
 import {
   deriveCredentials, slugUser, makeCheck, verifyCheck,
   encryptWith, decryptWith, cryptoAvailable,
@@ -204,6 +205,8 @@ function wireGlobal() {
   buildTopicChips();
   buildTopicFilter();
   setTopic(state.topic);
+  showQuote();
+  $('quote-card').onclick = () => showQuote(true);
 
   // warn before losing an unsaved recording
   window.addEventListener('beforeunload', e => {
@@ -504,29 +507,51 @@ function renderEntry() {
 /* ============================ sections ============================ */
 
 let dirty = false;
+let filling = false; // true while a day is being loaded into the boxes
 const markDirty = () => { dirty = true; };
 
-/** Build one labelled box per topic, plus the chips that aim the recorder. */
+/** One collapsible drop-down per topic, plus the chips that aim the recorder. */
 function buildSections() {
   const wrap = $('sections');
   wrap.innerHTML = '';
   for (const topic of TOPICS) {
-    const block = document.createElement('div');
+    const block = document.createElement('details');
     block.className = 'section';
+    block.dataset.section = topic.id;
 
-    const head = document.createElement('label');
+    const head = document.createElement('summary');
     head.className = 'section-label';
-    head.dataset.topicLabel = topic.id;
-    head.htmlFor = `sec-${topic.id}`;
+
+    const name = document.createElement('span');
+    name.dataset.topicLabel = topic.id;
+    head.appendChild(name);
+
+    const preview = document.createElement('span');
+    preview.className = 'section-preview';
+    preview.id = `pre-${topic.id}`;
+    head.appendChild(preview);
+
     block.appendChild(head);
 
+    const body = document.createElement('div');
+    body.className = 'section-body';
     const ta = document.createElement('textarea');
     ta.id = `sec-${topic.id}`;
     ta.dataset.topic = topic.id;
-    ta.rows = 2;
-    ta.addEventListener('input', () => { markDirty(); autoGrow(ta); });
+    ta.rows = 3;
+    ta.addEventListener('input', () => { markDirty(); autoGrow(ta); updatePreview(topic.id); });
     ta.addEventListener('focus', () => setTopic(topic.id));
-    block.appendChild(ta);
+    body.appendChild(ta);
+    block.appendChild(body);
+
+    // Opening a topic is also how you choose where a voice note goes - but
+    // not while loading a day, or the last-filled topic would steal the aim.
+    block.addEventListener('toggle', () => {
+      if (block.open && !filling) {
+        setTopic(topic.id);
+        autoGrow(ta);
+      }
+    });
 
     wrap.appendChild(block);
   }
@@ -537,6 +562,19 @@ function relabelSections() {
   document.querySelectorAll('[data-topic-label]').forEach(el => {
     el.textContent = topicLabel(el.dataset.topicLabel, lang);
   });
+}
+
+/** Shows the first line of a closed topic, so you can see what is in it. */
+function updatePreview(topicId) {
+  const el = $(`pre-${topicId}`);
+  if (!el) return;
+  const value = ($(`sec-${topicId}`)?.value || '').trim().replace(/\s+/g, ' ');
+  el.textContent = value ? value.slice(0, 70) : '';
+}
+
+function openSection(topicId, open = true) {
+  const el = document.querySelector(`.section[data-section="${topicId}"]`);
+  if (el) el.open = open;
 }
 
 function autoGrow(ta) {
@@ -555,20 +593,33 @@ function readSections() {
 
 function fillSections(sections) {
   state.sections = sections || {};
+  filling = true;
+  let anyOpen = false;
   for (const topic of TOPICS) {
     const ta = $(`sec-${topic.id}`);
     if (!ta) continue;
     ta.value = state.sections[topic.id] || '';
     autoGrow(ta);
+    updatePreview(topic.id);
+    // Topics you have written in stay open; the rest fold away.
+    const written = Boolean(ta.value.trim());
+    openSection(topic.id, written);
+    anyOpen = anyOpen || written;
   }
+  // A blank day opens the first topic so there is somewhere to start.
+  if (!anyOpen) openSection(TOPICS[0].id, true);
+  filling = false;
+  setTopic(TOPICS[0].id);
   dirty = false;
 }
 
 function appendToTopic(topicId, text) {
   const ta = $(`sec-${topicId}`);
   if (!ta) return;
+  openSection(topicId, true); // so you can see the words land
   ta.value = ta.value.trim() ? `${ta.value.trim()}\n\n${text}` : text;
   autoGrow(ta);
+  updatePreview(topicId);
   markDirty();
   ta.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
@@ -601,6 +652,16 @@ function buildTopicFilter() {
     sel.appendChild(opt);
   }
   sel.value = keep;
+}
+
+/* ============================== quote ============================= */
+
+let currentQuote = null;
+
+function showQuote(next = false) {
+  currentQuote = randomQuote(next ? currentQuote : null);
+  $('quote-text').textContent = `“${currentQuote.t}”`;
+  $('quote-source').textContent = currentQuote.s;
 }
 
 function setTopic(id) {

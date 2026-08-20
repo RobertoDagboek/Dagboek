@@ -1,0 +1,135 @@
+// One hundred lines to open the day with: fifty Stoic, fifty from Scripture.
+//
+// Bible verses are the King James Version and the Stoics are 19th-century
+// translations (Long, Higginson, Gummere) - all long out of copyright, so this
+// file is safe to publish. Attributions follow the standard citations, though
+// a few Stoic lines are the familiar English renderings rather than literal
+// translations; treat the reference as "where this comes from", not a
+// word-for-word chapter and verse.
+
+export const QUOTES = [
+  // ---------------------------- Stoic ----------------------------
+  { t: 'Waste no more time arguing about what a good man should be. Be one.', s: 'Marcus Aurelius, Meditations 10.16', k: 'stoic' },
+  { t: 'The happiness of your life depends upon the quality of your thoughts.', s: 'Marcus Aurelius, Meditations', k: 'stoic' },
+  { t: 'If it is not right, do not do it; if it is not true, do not say it.', s: 'Marcus Aurelius, Meditations 12.17', k: 'stoic' },
+  { t: 'Confine yourself to the present.', s: 'Marcus Aurelius, Meditations 7.29', k: 'stoic' },
+  { t: 'The best revenge is to be unlike him who performed the injury.', s: 'Marcus Aurelius, Meditations 6.6', k: 'stoic' },
+  { t: 'Loss is nothing else but change, and change is Nature’s delight.', s: 'Marcus Aurelius, Meditations 9.35', k: 'stoic' },
+  { t: 'Never let the future disturb you. You will meet it, if you have to, with the same weapons of reason which today arm you against the present.', s: 'Marcus Aurelius, Meditations 7.8', k: 'stoic' },
+  { t: 'Look within. Within is the fountain of good, and it will ever bubble up, if thou wilt ever dig.', s: 'Marcus Aurelius, Meditations 7.59', k: 'stoic' },
+  { t: 'Dwell on the beauty of life. Watch the stars, and see yourself running with them.', s: 'Marcus Aurelius, Meditations 7.47', k: 'stoic' },
+  { t: 'How much time he saves who does not look to see what his neighbour says or does or thinks.', s: 'Marcus Aurelius, Meditations 4.18', k: 'stoic' },
+  { t: 'The soul becomes dyed with the colour of its thoughts.', s: 'Marcus Aurelius, Meditations 5.16', k: 'stoic' },
+  { t: 'Very little is needed to make a happy life; it is all within yourself, in your way of thinking.', s: 'Marcus Aurelius, Meditations 7.67', k: 'stoic' },
+  { t: 'Do every act of your life as though it were the last act of your life.', s: 'Marcus Aurelius, Meditations 2.5', k: 'stoic' },
+  { t: 'Adapt yourself to the things among which your lot has been cast.', s: 'Marcus Aurelius, Meditations 6.39', k: 'stoic' },
+  { t: 'Reject your sense of injury and the injury itself disappears.', s: 'Marcus Aurelius, Meditations 4.7', k: 'stoic' },
+  { t: 'The impediment to action advances action. What stands in the way becomes the way.', s: 'Marcus Aurelius, Meditations 5.20', k: 'stoic' },
+  { t: 'Nowhere can man find a quieter or more untroubled retreat than in his own soul.', s: 'Marcus Aurelius, Meditations 4.3', k: 'stoic' },
+  { t: 'Everything that happens happens as it should, and if you observe carefully, you will find this to be so.', s: 'Marcus Aurelius, Meditations 4.10', k: 'stoic' },
+  { t: 'Be tolerant with others and strict with yourself.', s: 'Marcus Aurelius, Meditations', k: 'stoic' },
+  { t: 'Take away the complaint, "I have been harmed", and the harm is taken away.', s: 'Marcus Aurelius, Meditations 4.7', k: 'stoic' },
+  { t: 'Let it be your constant method to look into the design of people’s actions.', s: 'Marcus Aurelius, Meditations', k: 'stoic' },
+  { t: 'Consider how much more you often suffer from your anger and grief, than from those very things for which you are angry and grieved.', s: 'Marcus Aurelius, Meditations 11.18', k: 'stoic' },
+  { t: 'A man’s worth is no greater than the worth of his ambitions.', s: 'Marcus Aurelius, Meditations 7.3', k: 'stoic' },
+  { t: 'Perfection of character is this: to live each day as if it were your last, without frenzy, without apathy, without pretence.', s: 'Marcus Aurelius, Meditations 7.69', k: 'stoic' },
+  { t: 'Receive without pride, let go without attachment.', s: 'Marcus Aurelius, Meditations 8.33', k: 'stoic' },
+
+  { t: 'We suffer more often in imagination than in reality.', s: 'Seneca, Letters 13', k: 'stoic' },
+  { t: 'It is not that we have a short time to live, but that we waste a lot of it.', s: 'Seneca, On the Shortness of Life', k: 'stoic' },
+  { t: 'As long as you live, keep learning how to live.', s: 'Seneca, Letters 76', k: 'stoic' },
+  { t: 'Difficulties strengthen the mind, as labour does the body.', s: 'Seneca, Letters', k: 'stoic' },
+  { t: 'Begin at once to live, and count each separate day as a separate life.', s: 'Seneca, Letters 101', k: 'stoic' },
+  { t: 'While we are postponing, life speeds by.', s: 'Seneca, Letters 1', k: 'stoic' },
+  { t: 'The greatest obstacle to living is expectancy, which hangs upon tomorrow and loses today.', s: 'Seneca, On the Shortness of Life', k: 'stoic' },
+  { t: 'Associate with those who will make a better man of you.', s: 'Seneca, Letters 7', k: 'stoic' },
+  { t: 'Wherever there is a human being, there is an opportunity for a kindness.', s: 'Seneca, On the Happy Life', k: 'stoic' },
+  { t: 'He who is brave is free.', s: 'Seneca, Letters', k: 'stoic' },
+  { t: 'No man is more unhappy than he who never faces adversity, for he is not permitted to prove himself.', s: 'Seneca, On Providence', k: 'stoic' },
+  { t: 'It is a rough road that leads to the heights of greatness.', s: 'Seneca, Letters 84', k: 'stoic' },
+  { t: 'Nothing is a better proof of a well ordered mind than a man’s ability to stop just where he is and pass some time in his own company.', s: 'Seneca, Letters 2', k: 'stoic' },
+  { t: 'Sometimes even to live is an act of courage.', s: 'Seneca, Letters 78', k: 'stoic' },
+  { t: 'All cruelty springs from weakness.', s: 'Seneca, Letters', k: 'stoic' },
+  { t: 'Hold fast to some plain measure of life, and do not deviate from it.', s: 'Seneca, Letters 20', k: 'stoic' },
+  { t: 'A great fortune is a great servitude.', s: 'Seneca, To Polybius', k: 'stoic' },
+  { t: 'The mind that is anxious about the future is miserable.', s: 'Seneca, Letters 98', k: 'stoic' },
+
+  { t: 'Men are disturbed not by things, but by the views which they take of things.', s: 'Epictetus, Enchiridion 5', k: 'stoic' },
+  { t: 'First say to yourself what you would be; and then do what you have to do.', s: 'Epictetus, Discourses', k: 'stoic' },
+  { t: 'No man is free who is not master of himself.', s: 'Epictetus, Discourses', k: 'stoic' },
+  { t: 'Wealth consists not in having great possessions, but in having few wants.', s: 'Epictetus, Discourses', k: 'stoic' },
+  { t: 'Make the best use of what is in your power, and take the rest as it happens.', s: 'Epictetus, Discourses', k: 'stoic' },
+  { t: 'If you want to improve, be content to be thought foolish and stupid.', s: 'Epictetus, Enchiridion 13', k: 'stoic' },
+  { t: 'He is a wise man who does not grieve for the things which he has not, but rejoices for those which he has.', s: 'Epictetus, Fragments', k: 'stoic' },
+  { t: 'Seek not that the things which happen should happen as you wish; but wish the things which happen to be as they are, and you will have a tranquil flow of life.', s: 'Epictetus, Enchiridion 8', k: 'stoic' },
+  { t: 'It is impossible for a man to learn what he thinks he already knows.', s: 'Epictetus, Discourses', k: 'stoic' },
+  { t: 'Practise yourself, for heaven’s sake, in little things; and thence proceed to greater.', s: 'Epictetus, Discourses', k: 'stoic' },
+  { t: 'Nothing great is created suddenly, any more than a bunch of grapes or a fig.', s: 'Epictetus, Discourses', k: 'stoic' },
+  { t: 'Freedom is not procured by a full enjoyment of what is desired, but by controlling the desire.', s: 'Epictetus, Discourses', k: 'stoic' },
+  { t: 'It is not he who reviles you who insults you, but your opinion that these things are insulting.', s: 'Epictetus, Enchiridion 20', k: 'stoic' },
+  { t: 'First learn the meaning of what you say, and then speak.', s: 'Epictetus, Discourses', k: 'stoic' },
+  { t: 'Do not seek to have events happen as you want them to, but instead want them to happen as they do happen.', s: 'Epictetus, Enchiridion 8', k: 'stoic' },
+  { t: 'Whoever does not regard what he has as most ample wealth, is unhappy, though he be master of the world.', s: 'Epictetus, Fragments', k: 'stoic' },
+
+  // ---------------------------- Scripture ----------------------------
+  { t: 'The LORD is my shepherd; I shall not want.', s: 'Psalm 23:1', k: 'bible' },
+  { t: 'Trust in the LORD with all thine heart; and lean not unto thine own understanding. In all thy ways acknowledge him, and he shall direct thy paths.', s: 'Proverbs 3:5-6', k: 'bible' },
+  { t: 'I can do all things through Christ which strengtheneth me.', s: 'Philippians 4:13', k: 'bible' },
+  { t: 'Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest.', s: 'Joshua 1:9', k: 'bible' },
+  { t: 'They that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary.', s: 'Isaiah 40:31', k: 'bible' },
+  { t: 'And we know that all things work together for good to them that love God.', s: 'Romans 8:28', k: 'bible' },
+  { t: 'God is our refuge and strength, a very present help in trouble.', s: 'Psalm 46:1', k: 'bible' },
+  { t: 'Take therefore no thought for the morrow: for the morrow shall take thought for the things of itself. Sufficient unto the day is the evil thereof.', s: 'Matthew 6:34', k: 'bible' },
+  { t: 'For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil, to give you an expected end.', s: 'Jeremiah 29:11', k: 'bible' },
+  { t: 'Commit thy works unto the LORD, and thy thoughts shall be established.', s: 'Proverbs 16:3', k: 'bible' },
+  { t: 'This is the day which the LORD hath made; we will rejoice and be glad in it.', s: 'Psalm 118:24', k: 'bible' },
+  { t: 'For God hath not given us the spirit of fear; but of power, and of love, and of a sound mind.', s: '2 Timothy 1:7', k: 'bible' },
+  { t: 'What doth the LORD require of thee, but to do justly, and to love mercy, and to walk humbly with thy God?', s: 'Micah 6:8', k: 'bible' },
+  { t: 'To every thing there is a season, and a time to every purpose under the heaven.', s: 'Ecclesiastes 3:1', k: 'bible' },
+  { t: 'And let us not be weary in well doing: for in due season we shall reap, if we faint not.', s: 'Galatians 6:9', k: 'bible' },
+  { t: 'Count it all joy when ye fall into divers temptations; knowing this, that the trying of your faith worketh patience.', s: 'James 1:2-3', k: 'bible' },
+  { t: 'Commit thy way unto the LORD; trust also in him; and he shall bring it to pass.', s: 'Psalm 37:5', k: 'bible' },
+  { t: 'Iron sharpeneth iron; so a man sharpeneth the countenance of his friend.', s: 'Proverbs 27:17', k: 'bible' },
+  { t: 'Charity suffereth long, and is kind; charity envieth not; charity vaunteth not itself, is not puffed up.', s: '1 Corinthians 13:4', k: 'bible' },
+  { t: 'And whatsoever ye do, do it heartily, as to the Lord, and not unto men.', s: 'Colossians 3:23', k: 'bible' },
+  { t: 'Thy word is a lamp unto my feet, and a light unto my path.', s: 'Psalm 119:105', k: 'bible' },
+  { t: 'Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee.', s: 'Isaiah 41:10', k: 'bible' },
+  { t: 'Come unto me, all ye that labour and are heavy laden, and I will give you rest.', s: 'Matthew 11:28', k: 'bible' },
+  { t: 'And be not conformed to this world: but be ye transformed by the renewing of your mind.', s: 'Romans 12:2', k: 'bible' },
+  { t: 'The LORD is nigh unto them that are of a broken heart; and saveth such as be of a contrite spirit.', s: 'Psalm 34:18', k: 'bible' },
+  { t: 'A soft answer turneth away wrath: but grievous words stir up anger.', s: 'Proverbs 15:1', k: 'bible' },
+  { t: 'Now faith is the substance of things hoped for, the evidence of things not seen.', s: 'Hebrews 11:1', k: 'bible' },
+  { t: 'Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God.', s: 'Philippians 4:6', k: 'bible' },
+  { t: 'Cast thy burden upon the LORD, and he shall sustain thee.', s: 'Psalm 55:22', k: 'bible' },
+  { t: 'And be ye kind one to another, tenderhearted, forgiving one another.', s: 'Ephesians 4:32', k: 'bible' },
+  { t: 'In every thing give thanks.', s: '1 Thessalonians 5:18', k: 'bible' },
+  { t: 'Keep thy heart with all diligence; for out of it are the issues of life.', s: 'Proverbs 4:23', k: 'bible' },
+  { t: 'I will lift up mine eyes unto the hills, from whence cometh my help. My help cometh from the LORD.', s: 'Psalm 121:1-2', k: 'bible' },
+  { t: 'Let your light so shine before men, that they may see your good works.', s: 'Matthew 5:16', k: 'bible' },
+  { t: 'But the fruit of the Spirit is love, joy, peace, longsuffering, gentleness, goodness, faith.', s: 'Galatians 5:22', k: 'bible' },
+  { t: 'The name of the LORD is a strong tower: the righteous runneth into it, and is safe.', s: 'Proverbs 18:10', k: 'bible' },
+  { t: 'Tribulation worketh patience; and patience, experience; and experience, hope.', s: 'Romans 5:3-4', k: 'bible' },
+  { t: 'The LORD is my light and my salvation; whom shall I fear?', s: 'Psalm 27:1', k: 'bible' },
+  { t: 'Casting all your care upon him; for he careth for you.', s: '1 Peter 5:7', k: 'bible' },
+  { t: 'It is of the LORD’s mercies that we are not consumed, because his compassions fail not. They are new every morning.', s: 'Lamentations 3:22-23', k: 'bible' },
+  { t: 'Peace I leave with you, my peace I give unto you: not as the world giveth, give I unto you.', s: 'John 14:27', k: 'bible' },
+  { t: 'The thoughts of the diligent tend only to plenteousness.', s: 'Proverbs 21:5', k: 'bible' },
+  { t: 'So teach us to number our days, that we may apply our hearts unto wisdom.', s: 'Psalm 90:12', k: 'bible' },
+  { t: 'Thou wilt keep him in perfect peace, whose mind is stayed on thee.', s: 'Isaiah 26:3', k: 'bible' },
+  { t: 'Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you.', s: 'Matthew 7:7', k: 'bible' },
+  { t: 'My grace is sufficient for thee: for my strength is made perfect in weakness.', s: '2 Corinthians 12:9', k: 'bible' },
+  { t: 'Create in me a clean heart, O God; and renew a right spirit within me.', s: 'Psalm 51:10', k: 'bible' },
+  { t: 'He that watereth shall be watered also himself.', s: 'Proverbs 11:25', k: 'bible' },
+  { t: 'Whatsoever thy hand findeth to do, do it with thy might.', s: 'Ecclesiastes 9:10', k: 'bible' },
+  { t: 'The joy of the LORD is your strength.', s: 'Nehemiah 8:10', k: 'bible' },
+];
+
+/** A different one on every load. */
+export function randomQuote(notThis) {
+  if (QUOTES.length < 2) return QUOTES[0];
+  let pick;
+  do {
+    pick = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+  } while (notThis && pick.t === notThis.t);
+  return pick;
+}

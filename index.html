@@ -3,13 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1b1a17">
+<meta name="theme-color" content="#f1f6f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1411" media="(prefers-color-scheme: dark)">
 <title>Dagboek</title>
 
 <!-- iOS home screen: it ignores the manifest for these, and only takes PNG -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Dagboek">
 <meta name="format-detection" content="telephone=no">
 
@@ -84,6 +85,8 @@
 
   <!-- ---- TODAY / EDITOR ---- -->
   <main id="view-today" class="view">
+   <div class="shell">
+    <div class="col-main">
     <div class="datebar">
       <button id="date-prev" class="icon" aria-label="Vorige">‹</button>
       <input id="entry-date" type="date">
@@ -155,6 +158,15 @@
     <div class="row">
       <button id="btn-delete" class="link small danger" data-i18n="entry.delete"></button>
     </div>
+    </div><!-- /col-main -->
+
+    <aside class="rail">
+      <div id="quote-card" class="quote-card" title="Nog een / another">
+        <p id="quote-text" class="quote-text"></p>
+        <p id="quote-source" class="quote-source"></p>
+      </div>
+    </aside>
+   </div><!-- /shell -->
   </main>
 
   <!-- ---- LIST ---- -->
