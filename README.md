@@ -224,6 +224,20 @@ minute, so expect around 50–80 short clips before you need to prune or upgrade
 and only a handful if they are large ones. Photos are negligible by comparison
 at ~200 KB each after resizing.
 
+## Checking it still works
+
+```powershell
+node test/smoke.mjs
+```
+
+Starts `app.js` against a stubbed browser and fails on anything thrown during
+startup. `node --check` only parses — it will happily accept code that explodes
+the moment it runs, which is exactly how a temporal-dead-zone bug once shipped a
+blank green page. This catches that class of thing.
+
+It proves the app **boots**, not that it **looks right**. Only a real browser
+tells you that.
+
 ## Testing on your own PC first
 
 You need a local web server (opening `index.html` directly will not work — ES

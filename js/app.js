@@ -41,8 +41,10 @@ const state = {
 };
 
 /* ============================== boot ============================== */
-
-boot();
+// boot() is *called* at the very bottom of this file, on purpose. Module-level
+// `let`s further down (currentQuote, dirty, filling, ...) sit in the temporal
+// dead zone until their own line runs, so starting up from here would crash the
+// moment boot touched one of them.
 
 async function boot() {
   applyI18n();
@@ -1348,3 +1350,9 @@ function registerSW() {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
 }
+
+/* ============================== start ============================= */
+// Last line of the file, so every module-level binding above is initialised
+// before anything runs. See the note at boot().
+
+boot();
