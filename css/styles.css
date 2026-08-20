@@ -29,6 +29,11 @@
 
 * { box-sizing: border-box; }
 
+/* An author `display` rule beats the browser's own [hidden] { display: none },
+   so anything given display:flex/grid would ignore the hidden attribute.
+   This keeps `hidden` meaning hidden, whatever else a rule says. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -36,7 +41,11 @@ html, body {
   color: var(--text);
   font: 16px/1.5 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
   -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
+
+/* No double-tap-to-zoom delay on anything you tap. */
+button, label, .chip, summary { touch-action: manipulation; }
 
 body {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -75,11 +84,16 @@ input, textarea, select {
   width: 100%;
   padding: 11px 12px;
   font: inherit;
+  /* Never below 16px: iOS zooms the whole page in when you focus a smaller
+     field, and then leaves you zoomed. */
+  font-size: 16px;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
   outline: none;
+  -webkit-appearance: none;
+  appearance: none;
 }
 input:focus, textarea:focus, select:focus { border-color: var(--accent); }
 textarea { resize: vertical; line-height: 1.6; }
@@ -171,6 +185,8 @@ button {
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   margin-top: 18px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .key {
   aspect-ratio: 1.35;
@@ -362,7 +378,7 @@ audio { width: 100%; margin-top: 14px; }
 }
 .photo.is-busy { opacity: .5; }
 
-.sticky-save { position: sticky; bottom: 12px; }
+.sticky-save { position: sticky; bottom: calc(12px + env(safe-area-inset-bottom)); }
 .sticky-save .primary { box-shadow: var(--shadow); }
 
 hr { border: none; border-top: 1px solid var(--line); margin: 28px 0; }
@@ -395,8 +411,9 @@ hr { border: none; border-top: 1px solid var(--line); margin: 28px 0; }
 
 /* ---------- search + tags ---------- */
 .filters { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.filters { flex-wrap: wrap; }
 .filters input,
-.filters select { flex: 1; min-width: 0; font-size: 14px; padding: 8px 10px; }
+.filters select { flex: 1; min-width: 0; padding: 9px 10px; }
 .filters select { flex: 1 1 100%; }
 .filters .link { white-space: nowrap; }
 
@@ -452,16 +469,18 @@ mark {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0,0,0,.9);
+  background: rgba(0,0,0,.92);
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
 }
 .viewer-body { max-width: 100%; max-height: 100%; }
 .viewer-body img,
 .viewer-body video {
   max-width: 100%;
-  max-height: 88vh;
+  max-height: 80vh;
+  max-height: 80dvh; /* iOS: vh includes the toolbars, dvh does not */
   border-radius: 8px;
   display: block;
 }
@@ -488,7 +507,7 @@ mark {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 26px;
+  bottom: calc(26px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   max-width: 90vw;
   padding: 12px 18px;
@@ -498,4 +517,62 @@ mark {
   font-size: 14px;
   z-index: 100;
   box-shadow: var(--shadow);
+}
+
+/* ==========================================================
+   Phone. Everything below is about thumbs, not small screens:
+   44px minimum tap targets, less chrome, more room to write.
+   ========================================================== */
+@media (max-width: 640px) {
+  .view { padding: 14px 14px 150px; }
+
+  .card {
+    margin: 4vh auto 0;
+    padding: 22px 20px;
+    border-radius: 18px;
+  }
+
+  .topbar { padding: 6px 10px; gap: 2px; }
+  .tab { padding: 10px 12px; font-size: 15px; }
+  .icon { width: 42px; height: 42px; }
+
+  /* Chips are tapped constantly - give them a real target. */
+  .chip, .topic-chip, .tag-chip { padding: 10px 14px; font-size: 14px; }
+  .chip button { padding: 2px 4px; font-size: 18px; }
+
+  /* Text links sit inside dense rows; pad them out so they can be hit. */
+  .link { padding: 10px 2px; }
+  .block-head { flex-wrap: wrap; row-gap: 4px; }
+  .block-head .link { margin-left: 0; }
+  .block-head .link + .link { margin-left: auto; }
+
+  .recorder { padding: 16px 14px; gap: 6px 14px; }
+  .record { width: 84px; height: 84px; }
+  .record .dot { width: 30px; height: 30px; }
+
+  .datebar input { padding: 12px; }
+
+  .section + .section { margin-top: 18px; }
+  .section textarea { min-height: 56px; padding: 12px; }
+
+  .photo-grid { grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 6px; }
+  .photo .x { width: 30px; height: 30px; font-size: 17px; }
+
+  /* Full-width primary actions read better under a thumb. */
+  .sticky-save { bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .sticky-save .primary { flex: 1; padding: 15px 20px; font-size: 16px; }
+
+  .filters { gap: 6px; }
+  .entry-card { padding: 14px; }
+
+  .keypad { gap: 10px; }
+  .key { aspect-ratio: 1.5; font-size: 26px; }
+  .pin-card { max-width: 100%; }
+}
+
+/* Short screens in landscape: stop the keypad pushing the dots off-screen. */
+@media (max-height: 560px) and (orientation: landscape) {
+  .card { margin-top: 2vh; }
+  .key { aspect-ratio: 2.2; font-size: 20px; }
+  .keypad { gap: 8px; }
 }
