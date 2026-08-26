@@ -15,6 +15,7 @@ import {
   dateStripWrapHtml, wireDateStrip, getDateStripValue,
   timePickerContainerHtml, wireTimePicker, getTimePickerValue,
   estimatePickerContainerHtml, wireEstimatePicker, getEstimatePickerValue,
+  dayTogglesHtml, wireDayToggles, getDayToggles, dayNames,
   sheetEl, openSheet, closeSheet, toast, refresh,
 } from '../core/ui.js';
 import { diaryDatesInRange, openDiaryDate } from '../diary/diary.js';
@@ -36,6 +37,9 @@ export function appliesOnDate(t2, dateStr) {
   if (t2.kind !== 'task') return false;
   if (t2.recurring === 'daily') return true;
   if (t2.recurring === 'weekdays') { const dow = parseDateStr(dateStr).getDay(); return dow >= 1 && dow <= 5; }
+  if (t2.recurring === 'days') {
+    return Array.isArray(t2.repeatDays) && t2.repeatDays.includes(parseDateStr(dateStr).getDay());
+  }
   if (t2.recurring === 'weekly' && t2.date) return parseDateStr(dateStr).getDay() === parseDateStr(t2.date).getDay();
   return t2.date === dateStr;
 }
@@ -60,6 +64,7 @@ function setStatus(msg) { const el = $('statusLine'); if (el) el.textContent = m
 function recurringLabel(t2) {
   if (t2.recurring === 'daily') return 'daily';
   if (t2.recurring === 'weekdays') return 'weekdays';
+  if (t2.recurring === 'days') return dayNames(t2.repeatDays) || 'no days picked';
   if (t2.recurring === 'weekly') return t2.date ? `every ${dowAbbr(t2.date)}` : 'weekly';
   return '';
 }
@@ -594,11 +599,21 @@ function inboxRowHtml(x) {
 
 function newTask(over = {}) {
   return {
-    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none',
+    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none', repeatDays: [],
     flagged: false, context: '', completed: false, lastCompletedDate: null, goalId: null,
     startedDate: '', lastTouchedDate: '', deadline: '', finished: false, finishedDate: null,
     order: Date.now(), createdAt: Date.now(), ...over,
   };
+}
+
+/** Show the weekday row only while "chosen days" is selected. */
+function bindRepeatToggle(selectId, wrapId) {
+  const select = $(selectId);
+  const wrap = $(wrapId);
+  if (!select || !wrap) return;
+  const sync = () => { wrap.hidden = select.value !== 'days'; };
+  select.addEventListener('change', sync);
+  sync();
 }
 
 /* ===================== capture sheet ===================== */
@@ -658,6 +673,7 @@ function capRepeatPillHtml() {
     <option value="daily">daily</option>
     <option value="weekly">weekly</option>
     <option value="weekdays">weekdays</option>
+    <option value="days">chosen days</option>
   </select></label>`;
 }
 function capExtraHtml() {
@@ -667,7 +683,8 @@ function capExtraHtml() {
       ${capRepeatPillHtml()}
       ${capContextPillHtml()}
       <button class="qo-flag" id="capFlag" type="button" data-on="0">🚩 Flag</button>
-    </div>`;
+    </div>
+    <div id="capDaysWrap" hidden>${dayTogglesHtml('capDays', [])}</div>`;
 
   if (capArea === 'today') return `<div class="cap-extra-group">${commons}</div>`;
   if (capArea === 'week') return `<div class="cap-extra-group">${dateStripWrapHtml('capWeekDay')}${commons}</div>`;
@@ -691,6 +708,8 @@ function capExtraHtml() {
 function wireCapExtra() {
   wireTimePicker('capTime', '🕐 Time');
   wireEstimatePicker('capEstimate');
+  wireDayToggles('capDays');
+  bindRepeatToggle('capRepeat', 'capDaysWrap');
   const flag = $('capFlag');
   if (flag) flag.addEventListener('click', () => {
     const on = flag.dataset.on !== '1';
@@ -711,6 +730,7 @@ function submitCapture() {
   const recurring = $('capRepeat') ? $('capRepeat').value : 'none';
   const flagged = $('capFlag') ? $('capFlag').dataset.on === '1' : false;
   const context = $('capContext') ? $('capContext').value : '';
+  const repeatDays = recurring === 'days' ? getDayToggles('capDays') : [];
   const notes = $('capNotes') ? $('capNotes').value.trim() : '';
   const estimate = getEstimatePickerValue('capEstimate');
 
@@ -721,9 +741,9 @@ function submitCapture() {
   }
 
   if (capArea === 'today') {
-    items.push(newTask({ title, notes, estimate, date: TODAY(), time, recurring, flagged, context }));
+    items.push(newTask({ title, notes, estimate, date: TODAY(), time, recurring, repeatDays, flagged, context }));
   } else if (capArea === 'week') {
-    items.push(newTask({ title, notes, estimate, date: getDateStripValue('capWeekDay') || addDays(TODAY(), 1), time, recurring, flagged, context }));
+    items.push(newTask({ title, notes, estimate, date: getDateStripValue('capWeekDay') || addDays(TODAY(), 1), time, recurring, repeatDays, flagged, context }));
   } else if (capArea === 'inbox') {
     items.push(newTask({ title, notes, context }));
   } else if (capArea === 'ongoing') {
@@ -797,6 +817,7 @@ function editorHtml(x) {
           <option value="daily" ${x.recurring === 'daily' ? 'selected' : ''}>daily</option>
           <option value="weekly" ${x.recurring === 'weekly' ? 'selected' : ''}>weekly</option>
           <option value="weekdays" ${x.recurring === 'weekdays' ? 'selected' : ''}>weekdays</option>
+          <option value="days" ${x.recurring === 'days' ? 'selected' : ''}>chosen days</option>
         </select>
       </div>
       <div class="field-row"><span class="fname">Area</span>
@@ -804,6 +825,9 @@ function editorHtml(x) {
           <option value="" ${!x.context ? 'selected' : ''}>&mdash;</option>
           ${CONTEXTS.map(c => `<option value="${c}" ${x.context === c ? 'selected' : ''}>${c}</option>`).join('')}
         </select>
+      </div>
+      <div class="field-row" id="editDaysWrap" ${x.recurring === 'days' ? '' : 'hidden'}>
+        ${dayTogglesHtml('editDays', x.repeatDays || [])}
       </div>
       <div class="toggle-row"><span class="fname">Flagged</span>
         <button class="ios-switch ${x.flagged ? 'on' : ''}" id="editFlagToggle" data-on="${x.flagged ? '1' : '0'}" type="button"><span class="thumb"></span></button>
@@ -824,6 +848,8 @@ function wireEditor(x) {
     $('moveNoneBtn').addEventListener('click', () => { $('editDate').value = ''; });
     wireTimePicker('editTime', '🕐 Time');
     wireEstimatePicker('editEstimate');
+    wireDayToggles('editDays');
+    bindRepeatToggle('editRecur', 'editDaysWrap');
     const flag = $('editFlagToggle');
     flag.addEventListener('click', () => {
       const on = flag.dataset.on !== '1';
@@ -845,6 +871,7 @@ function wireEditor(x) {
       x.time = getTimePickerValue('editTime');
       x.estimate = getEstimatePickerValue('editEstimate');
       x.recurring = $('editRecur').value;
+      x.repeatDays = x.recurring === 'days' ? getDayToggles('editDays') : [];
       x.context = $('editContext').value || '';
       x.flagged = $('editFlagToggle').dataset.on === '1';
     }

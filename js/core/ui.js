@@ -338,3 +338,44 @@ export function toast(msg) {
 // The screens ask for a redraw without importing the router, which would make
 // a cycle. app.js listens for this.
 export function refresh() { document.dispatchEvent(new CustomEvent('app:refresh')); }
+
+/* ===================== Weekday picker ===================== */
+// For "every Monday, Wednesday and Friday". Day numbers match JavaScript's
+// getDay(): 0 is Sunday. The row is shown Monday-first, the way a calendar is.
+
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+export function dayTogglesHtml(fieldId, days = []) {
+  const labels = dowLabels('narrow');
+  return `<div class="day-toggles" id="${fieldId}">
+    ${WEEK_ORDER.map((dow, i) => `
+      <button type="button" class="day-toggle ${days.includes(dow) ? 'is-on' : ''}"
+              data-dow="${dow}" aria-pressed="${days.includes(dow)}">${labels[i]}</button>`).join('')}
+  </div>`;
+}
+
+export function wireDayToggles(fieldId) {
+  const row = $(fieldId);
+  if (!row) return;
+  row.querySelectorAll('[data-dow]').forEach(btn => btn.addEventListener('click', () => {
+    const on = !btn.classList.contains('is-on');
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-pressed', String(on));
+  }));
+}
+
+export function getDayToggles(fieldId) {
+  const row = $(fieldId);
+  if (!row) return [];
+  return [...row.querySelectorAll('[data-dow].is-on')]
+    .map(b => Number(b.getAttribute('data-dow')))
+    .sort((a, b) => WEEK_ORDER.indexOf(a) - WEEK_ORDER.indexOf(b));
+}
+
+/** [1,3,5] -> "Mon, Wed, Fri" */
+export function dayNames(days = []) {
+  const short = dowLabels('short');
+  return WEEK_ORDER.filter(d => days.includes(d))
+    .map(d => short[WEEK_ORDER.indexOf(d)])
+    .join(', ');
+}
