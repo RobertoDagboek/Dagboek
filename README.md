@@ -158,6 +158,27 @@ Supabase side and device side.
 
 ---
 
+## Two apps, one app
+
+The planner (Today / Calendar / Goals / Inbox) and the diary now live together.
+The planner leads: its look, its screens and its interaction model are the shell,
+and the diary is a tab inside it.
+
+**What changed in the planner code.** It stored everything through
+`window.storage.get/set` - not a browser API, but something the environment it
+was written in provided. On GitHub Pages that object does not exist, so every
+save failed silently and tasks vanished on reload. Storage now goes to Supabase
+(`js/tasks.js`), diffing against the last saved state so editing one task sends
+one row rather than the whole list. Everything else - the spring engine, the
+swipe gestures, the sheets, the month grid - is the original logic, with its
+strings routed through i18n so the AF/EN button switches the whole app.
+
+**How the diary fits.** The Diary tab holds the day's entry: voice note straight
+to text, topics, tags, photos, video, location. The + button offers *Dagboek* as
+a destination alongside Today/Week/Ongoing/Goal/Inbox, so a thought can be
+captured the same way a task is. Days with an entry show a yellow marker in the
+calendar, and tapping a day offers to open it.
+
 ## The daily entry is split into topics
 
 Each day has one box per topic, defined in [js/topics.js](js/topics.js):

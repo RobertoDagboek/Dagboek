@@ -1,16 +1,14 @@
 <!DOCTYPE html>
 <html lang="af">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f1f6f2" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0d1411" media="(prefers-color-scheme: dark)">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0">
+<meta name="theme-color" content="#000000">
 <title>Dagboek</title>
 
-<!-- iOS home screen: it ignores the manifest for these, and only takes PNG -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Dagboek">
 <meta name="format-detection" content="telephone=no">
 
@@ -19,238 +17,73 @@
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <link rel="stylesheet" href="./css/styles.css">
 </head>
-<body>
+<body class="no-tabs">
 
-<!-- ============ SETUP (first run: Supabase keys) ============ -->
-<section id="screen-setup" class="screen">
-  <div class="card">
-    <h1 class="brand">Dagboek</h1>
-    <p class="muted" data-i18n="setup.intro"></p>
-    <label data-i18n="setup.url"></label>
-    <input id="setup-url" type="url" placeholder="https://xxxxxxxx.supabase.co" autocomplete="off" spellcheck="false">
-    <label data-i18n="setup.anon"></label>
-    <input id="setup-anon" type="text" placeholder="eyJhbGciOi..." autocomplete="off" spellcheck="false">
-    <button id="setup-save" class="primary" data-i18n="setup.save"></button>
-    <p class="hint" data-i18n="setup.hint"></p>
-  </div>
-</section>
+<!-- ============ LOCK: username + PIN ============ -->
+<section id="screen-lock" class="lockscreen">
+  <div class="lockcard">
+    <h1 class="lock-brand">Dagboek</h1>
+    <p class="lock-greet" id="pin-greet"></p>
 
-<!-- ============ LOGIN: username + PIN, nothing else ============ -->
-<section id="screen-pin" class="screen">
-  <div class="card pin-card">
-    <h1 class="brand">Dagboek</h1>
-    <p id="pin-greet" class="muted"></p>
-
-    <div id="pin-user-row" class="pin-user-row">
+    <div class="lock-user" id="pin-user-row">
       <input id="pin-user" type="text" autocomplete="username" autocapitalize="none"
              spellcheck="false" data-i18n-ph="pin.namePh">
     </div>
 
-    <p id="pin-prompt" class="pin-prompt"></p>
-    <div id="pin-dots" class="pin-dots" aria-hidden="true"></div>
-    <p id="pin-msg" class="hint pin-msg"></p>
+    <p class="lock-prompt" id="pin-prompt"></p>
+    <div class="pin-dots" id="pin-dots" aria-hidden="true"></div>
+    <p class="lock-msg" id="pin-msg"></p>
 
     <div class="keypad">
-      <button class="key" data-k="1">1</button>
-      <button class="key" data-k="2">2</button>
-      <button class="key" data-k="3">3</button>
-      <button class="key" data-k="4">4</button>
-      <button class="key" data-k="5">5</button>
-      <button class="key" data-k="6">6</button>
-      <button class="key" data-k="7">7</button>
-      <button class="key" data-k="8">8</button>
-      <button class="key" data-k="9">9</button>
-      <button class="key key-alt" data-k="del">⌫</button>
-      <button class="key" data-k="0">0</button>
-      <button class="key key-go" data-k="ok">✓</button>
+      <button class="key" data-k="1" type="button">1</button>
+      <button class="key" data-k="2" type="button">2</button>
+      <button class="key" data-k="3" type="button">3</button>
+      <button class="key" data-k="4" type="button">4</button>
+      <button class="key" data-k="5" type="button">5</button>
+      <button class="key" data-k="6" type="button">6</button>
+      <button class="key" data-k="7" type="button">7</button>
+      <button class="key" data-k="8" type="button">8</button>
+      <button class="key" data-k="9" type="button">9</button>
+      <button class="key key-alt" data-k="del" type="button">&#9003;</button>
+      <button class="key" data-k="0" type="button">0</button>
+      <button class="key key-go" data-k="ok" type="button">&#10003;</button>
     </div>
 
-    <div class="row pin-links">
+    <div class="lock-links">
       <button id="pin-newuser" class="ghost" data-i18n="pin.toCreate"></button>
-      <button id="pin-switch" class="link small" data-i18n="pin.switchUser"></button>
+      <button id="pin-switch" class="link" data-i18n="pin.switchUser"></button>
     </div>
   </div>
 </section>
 
 <!-- ============ APP ============ -->
-<section id="screen-app" class="screen">
-
-  <header class="topbar">
-    <button id="nav-today" class="tab is-active" data-i18n="nav.today"></button>
-    <button id="nav-list" class="tab" data-i18n="nav.entries"></button>
-    <div class="spacer"></div>
-    <button id="lang-toggle" class="lang" title="Afrikaans / English">AF</button>
-    <button id="nav-settings" class="icon" title="Settings" aria-label="Settings">⚙</button>
-  </header>
-
-  <!-- ---- TODAY / EDITOR ---- -->
-  <main id="view-today" class="view">
-   <div class="shell">
-    <div class="col-main">
-    <div class="datebar">
-      <button id="date-prev" class="icon" aria-label="Vorige">‹</button>
-      <input id="entry-date" type="date">
-      <button id="date-next" class="icon" aria-label="Volgende">›</button>
+<div id="app-shell" hidden>
+  <div class="navheader">
+    <div class="navheader-text">
+      <div class="navtitle" id="navTitle">Today</div>
+      <div class="navsub" id="navSub"></div>
     </div>
-
-    <!-- which topic am I talking about? -->
-    <div id="topic-chips" class="chip-row topic-chips"></div>
-
-    <!-- recorder -->
-    <div class="recorder">
-      <button id="rec-btn" class="record" aria-label="Record">
-        <span class="dot"></span>
+    <div class="navactions">
+      <button class="lang-btn" id="langBtn" type="button" title="Afrikaans / English">AF</button>
+      <button class="gear-btn" id="gearBtn" type="button" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
-      <div class="rec-meta">
-        <div id="rec-label" data-i18n="rec.idle"></div>
-        <div id="rec-time" class="timer">0:00</div>
-      </div>
-      <div class="levels"><div id="rec-level" class="level-fill"></div></div>
     </div>
-
-    <audio id="audio-play" controls hidden></audio>
-
-    <div id="transcribe-row" class="row" hidden>
-      <button id="btn-transcribe" class="primary" data-i18n="rec.transcribe"></button>
-      <button id="btn-drop-audio" class="link small" data-i18n="rec.discard"></button>
-    </div>
-    <p id="transcribe-status" class="hint"></p>
-
-    <!-- one block per topic, built from js/topics.js -->
-    <div id="sections" class="sections"></div>
-
-    <!-- location -->
-    <div class="block">
-      <div class="block-head">
-        <span data-i18n="entry.location"></span>
-        <button id="btn-locate" class="link small" data-i18n="entry.getLocation"></button>
-      </div>
-      <div id="loc-view" class="chip-row"></div>
-    </div>
-
-    <!-- tags -->
-    <div class="block">
-      <div class="block-head">
-        <span data-i18n="entry.tags"></span>
-      </div>
-      <div id="tag-view" class="chip-row"></div>
-      <input id="tag-input" type="text" list="tag-options" autocapitalize="none"
-             spellcheck="false" data-i18n-ph="entry.tagPh">
-      <datalist id="tag-options"></datalist>
-    </div>
-
-    <!-- photos and video -->
-    <div class="block">
-      <div class="block-head">
-        <span data-i18n="entry.media"></span>
-        <label class="link small" for="photo-input" data-i18n="entry.addPhotos"></label>
-        <label class="link small" for="video-input" data-i18n="entry.addVideo"></label>
-        <input id="photo-input" type="file" accept="image/*" multiple hidden>
-        <input id="video-input" type="file" accept="video/*" multiple hidden>
-      </div>
-      <div id="photo-grid" class="photo-grid"></div>
-    </div>
-
-    <div class="row sticky-save">
-      <button id="btn-save" class="primary" data-i18n="entry.save"></button>
-      <span id="save-status" class="hint"></span>
-    </div>
-    <div class="row">
-      <button id="btn-delete" class="link small danger" data-i18n="entry.delete"></button>
-    </div>
-    </div><!-- /col-main -->
-
-    <aside class="rail">
-      <div id="quote-card" class="quote-card" title="Nog een / another">
-        <p id="quote-text" class="quote-text"></p>
-        <p id="quote-source" class="quote-source"></p>
-      </div>
-    </aside>
-   </div><!-- /shell -->
-  </main>
-
-  <!-- ---- LIST ---- -->
-  <main id="view-list" class="view" hidden>
-    <input id="search" type="search" data-i18n-ph="list.search">
-
-    <div class="filters">
-      <select id="filter-topic" aria-label="Onderwerp"></select>
-      <input id="filter-from" type="date" aria-label="Van">
-      <span class="muted">–</span>
-      <input id="filter-to" type="date" aria-label="Tot">
-      <button id="filter-clear" class="link small" data-i18n="list.clear"></button>
-    </div>
-
-    <div id="tag-cloud" class="chip-row tag-cloud"></div>
-    <p id="list-count" class="hint"></p>
-    <div id="entry-list" class="entry-list"></div>
-  </main>
-
-  <!-- ---- media viewer ---- -->
-  <div id="viewer" class="viewer" hidden>
-    <button id="viewer-close" class="viewer-x" aria-label="Close">×</button>
-    <div id="viewer-body" class="viewer-body"></div>
   </div>
 
-  <!-- ---- SETTINGS ---- -->
-  <main id="view-settings" class="view" hidden>
-    <div class="block">
-      <label data-i18n="set.username"></label>
-      <input id="set-username" type="text" autocapitalize="none" spellcheck="false"
-             autocomplete="username" data-i18n-ph="pin.namePh">
-      <p class="hint" data-i18n="set.usernameHint"></p>
-      <div class="row">
-        <button id="btn-rename" class="ghost small" data-i18n="set.rename"></button>
-      </div>
-    </div>
+  <div class="wrap" id="screenContent"></div>
 
-    <div class="block">
-      <label data-i18n="set.apikey"></label>
-      <input id="set-openai" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false">
-      <p class="hint" data-i18n="set.apikeyHint"></p>
-    </div>
+  <button class="fab" id="fabAdd" type="button" aria-label="Add"></button>
+  <div class="tabbar" id="tabbar"></div>
+</div>
 
-    <div class="block">
-      <label data-i18n="set.model"></label>
-      <select id="set-model">
-        <option value="gpt-4o-transcribe">gpt-4o-transcribe</option>
-        <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe</option>
-        <option value="whisper-1">whisper-1</option>
-      </select>
-      <p class="hint" data-i18n="set.modelHint"></p>
-    </div>
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet"></div>
 
-    <div class="block">
-      <label data-i18n="set.lang"></label>
-      <select id="set-sttlang">
-        <option value="">— auto (Afrikaans + English) —</option>
-        <option value="af">Afrikaans</option>
-        <option value="en">English</option>
-      </select>
-      <p class="hint" data-i18n="set.langHint"></p>
-    </div>
-
-    <div class="block">
-      <label data-i18n="set.vocab"></label>
-      <textarea id="set-vocab" rows="4" placeholder="Riebeeck-Kasteel, oupa Hennie, bakkie, Nas01, Roberto"></textarea>
-      <p class="hint" data-i18n="set.vocabHint"></p>
-    </div>
-
-    <div class="row">
-      <button id="set-save" class="primary" data-i18n="set.save"></button>
-      <span id="set-status" class="hint"></span>
-    </div>
-
-    <hr>
-    <div class="row">
-      <button id="btn-changepin" class="link small" data-i18n="set.changePin"></button>
-      <button id="btn-export" class="link small" data-i18n="set.export"></button>
-      <button id="btn-signout" class="link small danger" data-i18n="set.signout"></button>
-    </div>
-    <p class="hint" id="who"></p>
-  </main>
-
-</section>
+<div id="viewer" class="viewer" hidden>
+  <button id="viewer-close" class="viewer-x" type="button" aria-label="Close">&times;</button>
+  <div id="viewer-body" class="viewer-body"></div>
+</div>
 
 <div id="toast" class="toast" hidden></div>
 

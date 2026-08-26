@@ -2,12 +2,21 @@
 // online, and the last-known copy when you are not. Cross-origin calls
 // (Supabase, OpenAI, the CDN) are never touched.
 
-const CACHE = 'dagboek-v7';
+const CACHE = 'dagboek-v8';
 const SHELL = [
   './',
   './index.html',
   './css/styles.css',
+  './app.webmanifest',
+  './icons/icon.svg',
+  './icons/apple-touch-icon.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
   './js/app.js',
+  './js/ui.js',
+  './js/planner.js',
+  './js/diary.js',
+  './js/tasks.js',
   './js/config.js',
   './js/crypto.js',
   './js/i18n.js',
@@ -20,10 +29,6 @@ const SHELL = [
   './js/video.js',
   './js/topics.js',
   './js/quotes.js',
-  './icons/icon.svg',
-  './icons/apple-touch-icon.png',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
 ];
 
 self.addEventListener('install', e => {

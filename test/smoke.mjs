@@ -1,13 +1,13 @@
 /**
- * Boot smoke test.   Run with:  node test/smoke.mjs
+ * Smoke test.   Run with:  node test/smoke.mjs
  *
  * `node --check` only parses a file - it happily accepts code that explodes the
- * moment it runs. This actually starts app.js against a stubbed browser and
- * fails on anything thrown during startup: temporal dead zones, missing
- * bindings, property access on something undefined.
+ * moment it runs. This starts the app against a stubbed browser and then draws
+ * every screen, failing on anything thrown: temporal dead zones, missing
+ * bindings, a render reaching for an element that no longer exists.
  *
- * It is a smoke test, not a DOM. It proves the app boots, not that it looks
- * right - only a real browser can tell you that.
+ * It proves the app runs, not that it looks right. Only a real browser can
+ * tell you that.
  */
 import { mkdtempSync, readdirSync, copyFileSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -30,7 +30,7 @@ function makeEl(tag = 'div') {
     tagName: String(tag).toUpperCase(),
     style: {}, dataset: {},
     value: '', textContent: '', innerHTML: '',
-    hidden: false, open: false, scrollHeight: 60,
+    hidden: false, open: false, scrollHeight: 60, disabled: false,
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
   };
   return new Proxy(store, {
@@ -41,6 +41,7 @@ function makeEl(tag = 'div') {
       if (key === 'querySelector') return () => makeEl();
       if (key === 'closest') return () => null;
       if (key === 'contains') return () => false;
+      if (key === 'getBoundingClientRect') return () => ({ width: 320, height: 44, top: 0, left: 0 });
       if (NOOP_METHODS.has(key)) return () => {};
       return undefined;
     },
@@ -57,9 +58,11 @@ globalThis.document = {
     return byId.get(id);
   },
   createElement: makeEl,
+  createDocumentFragment: () => makeEl(),
   querySelector: () => makeEl(),
   querySelectorAll: () => [],
   addEventListener() {},
+  dispatchEvent() { return true; },
   get activeElement() { return null; },
 };
 
@@ -73,22 +76,18 @@ globalThis.localStorage = {
 
 globalThis.location = {
   origin: 'https://robertodagboek.github.io',
-  pathname: '/Dagboek/',
-  protocol: 'https:',
-  reload() {},
+  pathname: '/Dagboek/', protocol: 'https:', reload() {},
 };
 
 Object.defineProperty(globalThis, 'navigator', {
-  value: {
-    mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) },
-    geolocation: {},
-  },
+  value: { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) }, geolocation: {} },
   configurable: true, writable: true,
 });
 
 globalThis.window = globalThis;
 globalThis.addEventListener = () => {};
 globalThis.confirm = () => false;
+globalThis.CustomEvent = class { constructor(type, init) { this.type = type; Object.assign(this, init); } };
 globalThis.requestAnimationFrame = cb => setTimeout(cb, 0);
 globalThis.cancelAnimationFrame = () => {};
 globalThis.URL.createObjectURL = () => 'blob:stub';
@@ -100,14 +99,14 @@ globalThis.createImageBitmap = async () => ({ width: 10, height: 10, close() {} 
 /* ---------------- copy the real modules, stub the CDN ---------------- */
 
 const SUPABASE_STUB = `export function createClient() {
-  const q = { select:()=>q, eq:()=>q, ilike:()=>q, or:()=>q, not:()=>q, contains:()=>q,
-    gte:()=>q, lte:()=>q, order:()=>q, limit:()=>q, insert:()=>q, upsert:()=>q, delete:()=>q,
+  const q = { select:()=>q, eq:()=>q, ilike:()=>q, or:()=>q, not:()=>q, contains:()=>q, in:()=>q,
+    gte:()=>q, lte:()=>q, order:()=>q, limit:()=>q, insert:()=>q, upsert:()=>q, delete:()=>q, update:()=>q,
     single: async () => ({ data: null, error: null }),
     maybeSingle: async () => ({ data: null, error: null }),
     then: r => Promise.resolve({ data: [], error: null }).then(r) };
   return {
     auth: {
-      getSession: async () => ({ data: { session: null } }),
+      getSession: async () => ({ data: { session: { user: { id: 'stub-user' } } } }),
       onAuthStateChange: () => {},
       signInWithPassword: async () => ({ error: null }),
       signUp: async () => ({ data: { session: null }, error: null }),
@@ -116,7 +115,7 @@ const SUPABASE_STUB = `export function createClient() {
       signOut: async () => {},
     },
     from: () => q,
-    rpc: async () => ({ data: 0, error: null }),
+    rpc: async () => ({ data: null, error: null }),
     storage: { from: () => ({
       upload: async () => ({ error: null }),
       remove: async () => ({}),
@@ -126,6 +125,10 @@ const SUPABASE_STUB = `export function createClient() {
 }`;
 
 const work = mkdtempSync(join(tmpdir(), 'dagboek-smoke-'));
+const problems = [];
+process.on('unhandledRejection', e => problems.push(`unhandled rejection: ${e?.stack || e}`));
+process.on('uncaughtException', e => problems.push(`uncaught: ${e?.stack || e}`));
+
 try {
   for (const file of readdirSync(JS_DIR).filter(f => f.endsWith('.js'))) {
     copyFileSync(join(JS_DIR, file), join(work, file));
@@ -134,29 +137,57 @@ try {
   writeFileSync(join(work, 'supabase-stub.js'), SUPABASE_STUB);
 
   const supaPath = join(work, 'supa.js');
-  const patched = readFileSync(supaPath, 'utf8')
-    .replace(/from 'https:\/\/esm\.sh\/@supabase\/supabase-js@\d+'/, "from './supabase-stub.js'");
-  writeFileSync(supaPath, patched);
+  writeFileSync(supaPath, readFileSync(supaPath, 'utf8')
+    .replace(/from 'https:\/\/esm\.sh\/@supabase\/supabase-js@\d+'/, "from './supabase-stub.js'"));
 
-  const problems = [];
-  process.on('unhandledRejection', e => problems.push(String(e?.stack || e)));
-  process.on('uncaughtException', e => problems.push(String(e?.stack || e)));
+  const url = f => pathToFileURL(join(work, f)).href;
 
+  // 1. does it boot?
   try {
-    await import(pathToFileURL(join(work, 'app.js')).href);
+    await import(url('app.js'));
   } catch (e) {
-    problems.push(String(e?.stack || e));
+    problems.push(`boot threw: ${e?.stack || e}`);
+  }
+  await new Promise(r => setTimeout(r, 300));
+
+  // 2. does every screen draw?
+  const screens = [];
+  try {
+    const planner = await import(url('planner.js'));
+    const diary = await import(url('diary.js'));
+    diary.setDiarySession({ user: { id: 'stub-user' } });
+    screens.push(
+      ['today', planner.renderToday],
+      ['calendar', planner.renderWeek],
+      ['goals', planner.renderGoals],
+      ['inbox', planner.renderInbox],
+      ['diary', diary.renderDiary],
+      ['capture sheet', () => planner.openCaptureSheet('today')],
+    );
+  } catch (e) {
+    problems.push(`could not load screens: ${e?.stack || e}`);
   }
 
-  await new Promise(r => setTimeout(r, 400)); // let boot()'s async tail finish
+  for (const [name, fn] of screens) {
+    try {
+      await fn();
+      console.log(`  drew ${name}`);
+    } catch (e) {
+      problems.push(`${name} threw: ${e?.stack || e}`);
+    }
+  }
+  await new Promise(r => setTimeout(r, 300));
 
   if (problems.length) {
-    console.log('SMOKE FAILED\n');
+    console.log('\nSMOKE FAILED\n');
     for (const p of problems) console.log(p, '\n');
     process.exitCode = 1;
   } else {
-    console.log('SMOKE PASSED - app.js boots with no runtime errors');
+    console.log('\nSMOKE PASSED - boots and every screen renders');
   }
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
+
+// The app sets a midnight-rollover interval, which would keep node alive.
+process.exit(process.exitCode || 0);
