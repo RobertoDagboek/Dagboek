@@ -217,21 +217,98 @@ export function getTimePickerValue(fieldId) {
 
 export function sheetEl() { return $('sheet'); }
 
+function sheetScale(el) {
+  const m = /scale\(([\d.]+)\)/.exec(el.style.transform);
+  return m ? parseFloat(m[1]) : 0.92;
+}
+
 export function openSheet() {
   const scrim = $('scrim');
-  scrim.style.pointerEvents = 'auto';
-  animateOpacity(scrim, 1, 220);
-  const s = new Spring(100, { dampingRatio: 0.86, response: 0.34 });
-  s.set(0);
-  runSpring(s, v => { $('sheet').style.transform = `translateY(${v}%)`; });
-}
-export function closeSheet() {
   const sheet = $('sheet');
-  const m = /translateY\(([-\d.]+)%\)/.exec(sheet.style.transform);
-  const s = new Spring(m ? parseFloat(m[1]) : 0, { dampingRatio: 1, response: 0.26 });
-  s.set(105);
-  runSpring(s, v => { sheet.style.transform = `translateY(${v}%)`; }, () => { $('scrim').style.pointerEvents = 'none'; });
-  animateOpacity($('scrim'), 0, 180);
+  scrim.style.pointerEvents = 'auto';
+  sheet.style.pointerEvents = 'auto';
+  animateOpacity(scrim, 1, 220);
+  animateOpacity(sheet, 1, 180);
+  const s = new Spring(0.92, { dampingRatio: 0.84, response: 0.3 });
+  s.set(1);
+  runSpring(s, v => { sheet.style.transform = `translate(-50%, -50%) scale(${v})`; });
+}
+
+export function closeSheet() {
+  const scrim = $('scrim');
+  const sheet = $('sheet');
+  const s = new Spring(sheetScale(sheet), { dampingRatio: 1, response: 0.22 });
+  s.set(0.92);
+  runSpring(s,
+    v => { sheet.style.transform = `translate(-50%, -50%) scale(${v})`; },
+    () => { scrim.style.pointerEvents = 'none'; sheet.style.pointerEvents = 'none'; });
+  animateOpacity(scrim, 0, 180);
+  animateOpacity(sheet, 0, 150);
+}
+
+/* ===================== Estimate picker ===================== */
+// Min-max plus a unit, chosen from dropdowns rather than typed, so what lands
+// in the data is always something the app can read back.
+
+const UNITS = ['hour', 'day', 'week'];
+
+export function estimatePickerContainerHtml(fieldId, estimateStr) {
+  return `<span id="${fieldId}Container">${estimateStr
+    ? estimateSelectsHtml(fieldId, estimateStr)
+    : estimateButtonHtml()}</span>`;
+}
+function estimateButtonHtml() {
+  return '<button class="qo-pill" data-estadd type="button">&#9201; Add estimate</button>';
+}
+function unitLabel(unit, count) {
+  return count === 1 ? unit : unit + 's';
+}
+function estimateSelectsHtml(fieldId, estimateStr) {
+  const m = /^(\d+)(?:\s*-\s*(\d+))?\s*(hour|day|week)/i.exec(estimateStr || '');
+  const min = m ? Number(m[1]) : 1;
+  const max = m && m[2] ? Number(m[2]) : min;
+  const unit = m ? m[3].toLowerCase() : 'hour';
+  const nums = Array.from({ length: 30 }, (_, i) => i + 1);
+  const opts = sel => nums.map(n => `<option value="${n}" ${n === sel ? 'selected' : ''}>${n}</option>`).join('');
+  return `<span class="time-picker">
+    <select class="tp-select" id="${fieldId}_min">${opts(min)}</select>
+    <span class="tp-colon">&ndash;</span>
+    <select class="tp-select" id="${fieldId}_max">${opts(max)}</select>
+    <select class="tp-select" id="${fieldId}_unit">
+      ${UNITS.map(u => `<option value="${u}" ${u === unit ? 'selected' : ''}>${u}s</option>`).join('')}
+    </select>
+    <button class="tp-clear" data-estclear type="button" aria-label="Clear estimate">&times;</button>
+  </span>`;
+}
+export function wireEstimatePicker(fieldId) {
+  const container = $(fieldId + 'Container');
+  if (!container) return;
+  function rerender(estimateStr) {
+    container.innerHTML = estimateStr ? estimateSelectsHtml(fieldId, estimateStr) : estimateButtonHtml();
+    bind();
+  }
+  function bind() {
+    const add = container.querySelector('[data-estadd]');
+    if (add) add.addEventListener('click', () => rerender('1 hour'));
+    const clear = container.querySelector('[data-estclear]');
+    if (clear) clear.addEventListener('click', () => rerender(''));
+    // Keep the range the right way round without arguing with the user.
+    const min = $(fieldId + '_min');
+    const max = $(fieldId + '_max');
+    if (min && max) {
+      min.addEventListener('change', () => { if (+max.value < +min.value) max.value = min.value; });
+      max.addEventListener('change', () => { if (+min.value > +max.value) min.value = max.value; });
+    }
+  }
+  bind();
+}
+export function getEstimatePickerValue(fieldId) {
+  const minSel = $(fieldId + '_min');
+  if (!minSel) return '';
+  const min = Number(minSel.value);
+  const max = Number($(fieldId + '_max').value);
+  const unit = $(fieldId + '_unit').value;
+  return min === max ? `${min} ${unitLabel(unit, min)}` : `${min}-${max} ${unitLabel(unit, max)}`;
 }
 export function animateOpacity(el, target, ms) {
   if (REDUCE_MOTION) { el.style.opacity = target; return; }

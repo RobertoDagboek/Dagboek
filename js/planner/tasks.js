@@ -19,7 +19,7 @@ export let items = [];
 /** id -> JSON of the row as last written, for working out what actually changed. */
 let saved = new Map();
 
-const COLUMNS = 'id, kind, title, notes, entry_date, at_time, recurring, flagged, context, '
+const COLUMNS = 'id, kind, title, notes, estimate, entry_date, at_time, recurring, flagged, context, '
   + 'completed, last_done, goal_id, started_date, touched_date, deadline, finished, '
   + 'finished_date, sort_order, created_at';
 
@@ -32,6 +32,7 @@ function toRow(t) {
     kind: t.kind,
     title: t.title ?? '',
     notes: t.notes ?? '',
+    estimate: orNull(t.estimate),
     entry_date: orNull(t.date),
     at_time: orNull(t.time),
     recurring: t.recurring ?? 'none',
@@ -57,6 +58,7 @@ function fromRow(r) {
     kind: r.kind,
     title: r.title ?? '',
     notes: r.notes ?? '',
+    estimate: r.estimate ?? '',
     date: r.entry_date ?? '',
     time: r.at_time ?? '',
     recurring: r.recurring ?? 'none',

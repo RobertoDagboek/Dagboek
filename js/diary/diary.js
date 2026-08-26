@@ -82,7 +82,7 @@ export function renderDiary(seedText) {
 
     <div class="search-row">
       <span class="search-icon">${ICON_CHEVRON}</span>
-      <input type="text" id="diarySearch" placeholder="${'Search your diary…'}" value="${escapeHtml(state.search)}">
+      <input type="text" id="diarySearch" placeholder="Search your diary…" value="${escapeHtml(state.search)}">
       ${state.search ? `<button class="search-clear" id="diarySearchClear" type="button">&times;</button>` : ''}
     </div>
 
@@ -121,38 +121,38 @@ async function renderEditor(seedText) {
     <div class="chip-row topic-chips" id="topicChips"></div>
 
     <div class="recorder">
-      <button class="record" id="recBtn" type="button" aria-label="${'Record a voice note'}"><span class="dot"></span></button>
-      <div class="rec-meta"><div id="recLabel">${'Record a voice note'}</div><div class="timer" id="recTime">0:00</div></div>
+      <button class="record" id="recBtn" type="button" aria-label="Record a voice note"><span class="dot"></span></button>
+      <div class="rec-meta"><div id="recLabel">Record a voice note</div><div class="timer" id="recTime">0:00</div></div>
       <div class="levels"><div class="level-fill" id="recLevel"></div></div>
     </div>
 
     <audio id="audioPlay" controls hidden></audio>
     <div class="chip-row" id="transcribeRow" hidden style="margin-bottom:12px;">
-      <button class="chip" id="btnTranscribe" type="button">${ICON_MIC} ${'Turn into text'}</button>
-      <button class="link" id="btnDropAudio" type="button">${'Discard'}</button>
+      <button class="chip" id="btnTranscribe" type="button">${ICON_MIC} Turn into text</button>
+      <button class="link" id="btnDropAudio" type="button">Discard</button>
     </div>
     <p class="status-line" id="transcribeStatus" style="text-align:left;margin:0 0 10px;"></p>
 
     <div id="sections"></div>
 
     <div class="block">
-      <div class="block-head"><span>${'Location'}</span>
-        <button class="link" id="btnLocate" type="button">${'Use my location'}</button></div>
+      <div class="block-head"><span>Location</span>
+        <button class="link" id="btnLocate" type="button">Use my location</button></div>
       <div class="chip-row" id="locView"></div>
     </div>
 
     <div class="block">
-      <div class="block-head"><span>${'Tags'}</span></div>
+      <div class="block-head"><span>Tags</span></div>
       <div class="chip-row" id="tagView"></div>
       <input type="text" class="tag-input" id="tagInput" list="tagOptions" autocapitalize="none"
-             spellcheck="false" placeholder="${'Type a tag and press Enter…'}">
+             spellcheck="false" placeholder="Type a tag and press Enter…">
       <datalist id="tagOptions"></datalist>
     </div>
 
     <div class="block">
-      <div class="block-head"><span>${'Photos and video'}</span>
-        <label class="link" for="photoInput">${'+ Photos'}</label>
-        <label class="link" for="videoInput">${'+ Video'}</label>
+      <div class="block-head"><span>Photos and video</span>
+        <label class="link" for="photoInput">+ Photos</label>
+        <label class="link" for="videoInput">+ Video</label>
         <input id="photoInput" type="file" accept="image/*" multiple hidden>
         <input id="videoInput" type="file" accept="video/*" multiple hidden>
       </div>
@@ -160,10 +160,10 @@ async function renderEditor(seedText) {
     </div>
 
     <div class="sheet-actions">
-      <button class="sheet-save" id="btnSave" type="button">${'Save entry'}</button>
+      <button class="sheet-save" id="btnSave" type="button">Save entry</button>
     </div>
     <p class="status-line" id="saveStatus"></p>
-    <div style="text-align:center;"><button class="link danger" id="btnDelete" type="button" hidden>${'Delete this entry'}</button></div>`;
+    <div style="text-align:center;"><button class="link danger" id="btnDelete" type="button" hidden>Delete this entry</button></div>`;
 
   buildSections();
   buildTopicChips();
@@ -530,7 +530,7 @@ async function runTranscribe() {
 
 async function grabLocation() {
   const box = $('locView');
-  box.innerHTML = `<span class="chip">${'Finding your location…'}</span>`;
+  box.innerHTML = `<span class="chip">Finding your location…</span>`;
   try {
     // Show each better reading as it arrives, so a slow lock does not look stuck.
     const fix = await bestPosition({
@@ -910,12 +910,12 @@ async function renderDiaryResults() {
   box.innerHTML = `
     <div class="filters">
       <select id="fTopic">
-        <option value="">${'All topics'}</option>
+        <option value="">All topics</option>
         ${TOPICS.map(x => `<option value="${x.id}" ${state.filterTopic === x.id ? 'selected' : ''}>${escapeHtml(topicLabel(x.id))}</option>`).join('')}
       </select>
     </div>
     <div class="chip-row tag-cloud" id="tagCloud"></div>
-    <div class="group" id="resultList"><div class="empty-note">${'Working…'}</div></div>`;
+    <div class="group" id="resultList"><div class="empty-note">Working…</div></div>`;
 
   $('fTopic').addEventListener('change', e => { state.filterTopic = e.target.value; renderDiaryResults(); });
   renderTagCloud();
@@ -927,7 +927,7 @@ async function renderDiaryResults() {
 
   const list = $('resultList');
   if (!list) return;
-  if (!rows.length) { list.innerHTML = `<div class="empty-note">${'Nothing found.'}</div>`; return; }
+  if (!rows.length) { list.innerHTML = `<div class="empty-note">Nothing found.</div>`; return; }
 
   list.innerHTML = '';
   for (const row of rows) {

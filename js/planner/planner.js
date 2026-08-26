@@ -14,6 +14,7 @@ import {
   fmtDateFull, fmtMonthDay, fmtMonthYear, fmtTime, dowAbbr, dowLabels,
   dateStripWrapHtml, wireDateStrip, getDateStripValue,
   timePickerContainerHtml, wireTimePicker, getTimePickerValue,
+  estimatePickerContainerHtml, wireEstimatePicker, getEstimatePickerValue,
   sheetEl, openSheet, closeSheet, toast, refresh,
 } from '../core/ui.js';
 import { diaryDatesInRange, openDiaryDate } from '../diary/diary.js';
@@ -99,7 +100,7 @@ export function renderToday() {
 
   if (goalsSoon.length) {
     html += `<div class="goal-banner">
-      <div class="goal-banner-title">${'Goals coming up'}</div>
+      <div class="goal-banner-title">Goals coming up</div>
       ${goalsSoon.map(g => {
         const d = daysBetween(today, g.deadline);
         const label = d < 0 ? `${-d}d overdue` : d === 0 ? 'Due today' : `${d}d left`;
@@ -109,13 +110,13 @@ export function renderToday() {
   }
 
   if (ongoing.length) {
-    html += `<div class="section-title">${'Ongoing'}</div><div class="group">`;
+    html += `<div class="section-title">Ongoing</div><div class="group">`;
     html += ongoing.map(ongoingRowHtml).join('');
     html += `</div>`;
   }
 
-  html += `<div class="section-title">${'Tasks'} &nbsp;&middot;&nbsp; ${doneCount}/${todays.length}</div><div class="group">`;
-  html += todays.length ? todays.map(x => taskRowHtml(x, today)).join('') : `<div class="empty-note">${'Nothing on your plate today. Tap + to add something.'}</div>`;
+  html += `<div class="section-title">Tasks &nbsp;&middot;&nbsp; ${doneCount}/${todays.length}</div><div class="group">`;
+  html += todays.length ? todays.map(x => taskRowHtml(x, today)).join('') : `<div class="empty-note">Nothing on your plate today. Tap + to add something.</div>`;
   html += `</div><div class="status-line" id="statusLine"></div>`;
 
   el.innerHTML = html;
@@ -135,10 +136,10 @@ function ongoingRowHtml(x) {
   return `<div class="ongoing-row">
       <div class="ongoing-top"><div class="ongoing-title" data-ongoingbody="${x.id}">${escapeHtml(x.title)}</div></div>
       ${x.notes ? `<div class="row-notes">${escapeHtml(x.notes)}</div>` : ''}
-      <div class="ongoing-meta ${staleDays >= 2 ? 'stale' : ''}">${`Started ${started} · last touched ${touched}`}${x.context ? ` &middot; ${escapeHtml(x.context)}` : ''}</div>
+      <div class="ongoing-meta ${staleDays >= 2 ? 'stale' : ''}">${`Started ${started} · last touched ${touched}`}${x.context ? ` &middot; ${escapeHtml(x.context)}` : ''}${x.estimate ? ` &middot; ⏱ ${escapeHtml(x.estimate)}` : ''}</div>
       <div class="ongoing-actions">
-        <button class="ongoing-btn log" data-log="${x.id}" type="button">${ICON_BOLT} ${'Log today'}</button>
-        <button class="ongoing-btn finish" data-finish="${x.id}" type="button">${ICON_CHECK} ${'Finish'}</button>
+        <button class="ongoing-btn log" data-log="${x.id}" type="button">${ICON_BOLT} Log today</button>
+        <button class="ongoing-btn finish" data-finish="${x.id}" type="button">${ICON_CHECK} Finish</button>
       </div>
     </div>`;
 }
@@ -163,20 +164,21 @@ function taskRowHtml(x, dateStr) {
   if (x.time) meta.push(`<span class="meta-chip">${fmtTime(x.time)}</span>`);
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
   if (x.context) meta.push(`<span class="meta-chip">${escapeHtml(x.context)}</span>`);
-  if (x.goalId) meta.push(`<span class="meta-chip goal">${'goal'}</span>`);
+  if (x.estimate) meta.push(`<span class="meta-chip">&#9201; ${escapeHtml(x.estimate)}</span>`);
+  if (x.goalId) meta.push(`<span class="meta-chip goal">goal</span>`);
   return `<div class="swipe-slot" data-taskslot="${x.id}">
       <div class="swipe-bg">
-        <span class="swipe-side left">${ICON_CHECK} ${'Complete'}</span>
-        <span class="swipe-side right">${'Delete'} ${ICON_TRASH}</span>
+        <span class="swipe-side left">${ICON_CHECK} Complete</span>
+        <span class="swipe-side right">Delete ${ICON_TRASH}</span>
       </div>
       <div class="row">
-        <button class="check-circle ${done ? 'done' : ''} ${x.flagged ? 'flag-color' : ''}" style="--dot-color:var(--sys-orange)" data-check="${x.id}" aria-label="${'Toggle done'}">${done ? ICON_CHECK : ''}</button>
+        <button class="check-circle ${done ? 'done' : ''} ${x.flagged ? 'flag-color' : ''}" style="--dot-color:var(--sys-orange)" data-check="${x.id}" aria-label="Toggle done">${done ? ICON_CHECK : ''}</button>
         <div class="row-body" data-body="${x.id}">
           <div class="row-title ${done ? 'done' : ''}">${x.flagged ? '&#128681; ' : ''}${escapeHtml(x.title)}</div>
           ${x.notes ? `<div class="row-notes">${escapeHtml(x.notes)}</div>` : ''}
           ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
         </div>
-        <button class="row-del" data-del="${x.id}" aria-label="${'Delete'}">${ICON_TRASH}</button>
+        <button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>
       </div>
     </div>`;
 }
@@ -288,7 +290,7 @@ export function renderWeek() {
   const el = $('screenContent');
   let html = `<div class="search-row">
     <span class="search-icon">${ICON_CHEVRON}</span>
-    <input type="text" id="weekSearch" data-i18n-ph="search.ph" placeholder="${'Search tasks, projects, goals…'}" value="${escapeHtml(searchQuery)}">
+    <input type="text" id="weekSearch" data-i18n-ph="search.ph" placeholder="Search tasks, projects, goals…" value="${escapeHtml(searchQuery)}">
     ${searchQuery ? `<button class="search-clear" id="searchClear" type="button">&times;</button>` : ''}
   </div>`;
 
@@ -327,7 +329,7 @@ function renderSearchResultsHtml(query) {
   results.sort((a, b) => (b.order || 0) - (a.order || 0));
 
   let html = `<div class="section-title">${`${results.length} results for “${escapeHtml(query)}”`}</div><div class="group">`;
-  html += results.length ? results.map(searchRowHtml).join('') : `<div class="empty-note">${'No matches.'}</div>`;
+  html += results.length ? results.map(searchRowHtml).join('') : `<div class="empty-note">No matches.</div>`;
   html += `</div>`;
   return html;
 }
@@ -374,7 +376,7 @@ function renderMonthGridHtml() {
 
   html += `<div class="month-legend">
     ${CONTEXTS.map(c => `<span class="mleg-item"><span class="mleg-dot" style="background:${CONTEXT_COLORS[c]}"></span>${c}</span>`).join('')}
-    <span class="mleg-item"><span class="mc-diary"></span>${'Diary'}</span>
+    <span class="mleg-item"><span class="mc-diary"></span>Diary</span>
   </div>`;
 
   html += `<div class="month-dow-row">${dowLabels('short').map(d => `<div class="month-dow">${d}</div>`).join('')}</div>`;
@@ -419,12 +421,12 @@ function openDayDetail(dateStr) {
     <div class="sheet-handle"></div>
     <div class="sheet-title">${fmtDateFull(dateStr)}</div>
     <div class="group" style="margin-bottom:14px;">
-      ${dayItems.length ? dayItems.map(x => dayRowHtml(x, dateStr)).join('') : `<div class="empty-note">${'Nothing planned.'}</div>`}
+      ${dayItems.length ? dayItems.map(x => dayRowHtml(x, dateStr)).join('') : `<div class="empty-note">Nothing planned.</div>`}
     </div>
     <button class="sheet-move-btn" id="dayDiaryBtn" type="button" style="width:100%;margin-bottom:10px;">
       ${hasDiary ? '✎ Open this day in the diary' : '✎ Write a diary entry for this day'}
     </button>
-    <div class="sheet-actions"><button class="sheet-cancel" id="dayClose" type="button">${'Close'}</button></div>`;
+    <div class="sheet-actions"><button class="sheet-cancel" id="dayClose" type="button">Close</button></div>`;
 
   $('dayClose').addEventListener('click', closeSheet);
   $('dayDiaryBtn').addEventListener('click', () => { closeSheet(); openDiaryDate(dateStr); });
@@ -448,13 +450,14 @@ function dayRowHtml(x, dateStr) {
   if (x.time) meta.push(`<span class="meta-chip">${fmtTime(x.time)}</span>`);
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
   if (x.context) meta.push(`<span class="meta-chip">${escapeHtml(x.context)}</span>`);
+  if (x.estimate) meta.push(`<span class="meta-chip">⏱ ${escapeHtml(x.estimate)}</span>`);
   return `<div class="row week-task-row">
-      <button class="check-circle ${done ? 'done' : ''}" data-check="${x.id}" aria-label="${'Toggle done'}">${done ? ICON_CHECK : ''}</button>
+      <button class="check-circle ${done ? 'done' : ''}" data-check="${x.id}" aria-label="Toggle done">${done ? ICON_CHECK : ''}</button>
       <div class="row-body" data-body="${x.id}">
         <div class="row-title ${done ? 'done' : ''}">${x.flagged ? '&#128681; ' : ''}${escapeHtml(x.title)}</div>
         ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
       </div>
-      <button class="row-del" data-del="${x.id}" aria-label="${'Delete'}">${ICON_TRASH}</button>
+      <button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>
     </div>`;
 }
 
@@ -465,12 +468,12 @@ export function renderGoals() {
   const active = items.filter(x => x.kind === 'goal' && !x.finished).sort((a, b) => a.deadline.localeCompare(b.deadline));
   const done = items.filter(x => x.kind === 'goal' && x.finished).sort((a, b) => (b.finishedDate || '').localeCompare(a.finishedDate || ''));
 
-  let html = `<div class="section-title">${'Active'}</div><div class="group">`;
-  html += active.length ? active.map(goalCardHtml).join('') : `<div class="empty-note">${'No goals yet — tap + and choose “Goal”.'}</div>`;
+  let html = `<div class="section-title">Active</div><div class="group">`;
+  html += active.length ? active.map(goalCardHtml).join('') : `<div class="empty-note">No goals yet — tap + and choose “Goal”.</div>`;
   html += `</div>`;
 
   if (done.length) {
-    html += `<div class="section-title">${'Completed'}</div><div class="group">${done.map(goalCardHtml).join('')}</div>`;
+    html += `<div class="section-title">Completed</div><div class="group">${done.map(goalCardHtml).join('')}</div>`;
   }
   html += `<div class="status-line" id="statusLine"></div>`;
   el.innerHTML = html;
@@ -508,6 +511,14 @@ export function renderGoals() {
   if (openInput) openInput.focus();
 }
 
+/** Date and estimate under a goal's step, so a plan reads as a plan. */
+function stepMeta(x) {
+  const bits = [];
+  if (x.date) bits.push(x.time ? `${fmtMonthDay(x.date)} · ${fmtTime(x.time)}` : fmtMonthDay(x.date));
+  if (x.estimate) bits.push(`&#9201; ${escapeHtml(x.estimate)}`);
+  return bits;
+}
+
 function goalCardHtml(g) {
   const d = daysBetween(TODAY(), g.deadline);
   let countdown;
@@ -521,7 +532,7 @@ function goalCardHtml(g) {
 
   return `<div class="goal-card">
       <div class="goal-top">
-        <button class="check-circle" style="width:22px;height:22px;" data-goalcheck="${g.id}" aria-label="${'Mark goal done'}">${g.finished ? ICON_CHECK : ''}</button>
+        <button class="check-circle" style="width:22px;height:22px;" data-goalcheck="${g.id}" aria-label="Mark goal done">${g.finished ? ICON_CHECK : ''}</button>
         <div style="flex:1;min-width:0;">
           <div class="goal-title ${g.finished ? 'done' : ''}" data-goaltitle="${g.id}">${escapeHtml(g.title)}</div>
           <div class="goal-sub">${`Due ${fmtMonthDay(g.deadline)}`}${linked.length ? ` &middot; ${`${linkedDone}/${linked.length} tasks done`}` : ''}</div>
@@ -532,11 +543,14 @@ function goalCardHtml(g) {
       ${linked.length ? `<div class="goal-tasks">${linked.map(x => `
         <div class="goal-task-row">
           <button class="check-circle ${x.completed ? 'done' : ''}" data-check="${x.id}" style="width:19px;height:19px;">${x.completed ? ICON_CHECK : ''}</button>
-          <div class="row-title" data-body="${x.id}">${escapeHtml(x.title)}</div>
+          <div style="flex:1;min-width:0;">
+            <div class="row-title" data-body="${x.id}">${escapeHtml(x.title)}</div>
+            ${stepMeta(x).length ? `<div class="row-notes" style="white-space:normal;">${stepMeta(x).join(' · ')}</div>` : ''}
+          </div>
         </div>`).join('')}</div>` : ''}
       ${goalAddOpenId === g.id
-        ? `<input type="text" class="tag-input" data-goaltaskinput="${g.id}" placeholder="${'Task title, then Enter'}">`
-        : `<button class="goal-add-task" data-goaladdtask="${g.id}" type="button">${'+ Add a task toward this'}</button>`}
+        ? `<input type="text" class="tag-input" data-goaltaskinput="${g.id}" placeholder="Task title, then Enter">`
+        : `<button class="goal-add-task" data-goaladdtask="${g.id}" type="button">+ Add a task toward this</button>`}
     </div>`;
 }
 
@@ -547,8 +561,8 @@ export function renderInbox() {
   const list = items.filter(x => isInboxTask(x) && matchesContext(x)).sort((a, b) => (b.order || 0) - (a.order || 0));
 
   let html = contextFilterHtml();
-  html += `<div class="section-title">${'Unscheduled'}</div><div class="group">`;
-  html += list.length ? list.map(inboxRowHtml).join('') : `<div class="empty-note">${'Nothing waiting — capture anything here without deciding when.'}</div>`;
+  html += `<div class="section-title">Unscheduled</div><div class="group">`;
+  html += list.length ? list.map(inboxRowHtml).join('') : `<div class="empty-note">Nothing waiting — capture anything here without deciding when.</div>`;
   html += `</div><div class="status-line" id="statusLine"></div>`;
   el.innerHTML = html;
 
@@ -570,9 +584,9 @@ function inboxRowHtml(x) {
       <div class="row-body" data-body="${x.id}">
         <div class="row-title">${escapeHtml(x.title)}${x.context ? ` <span class="meta-chip">${escapeHtml(x.context)}</span>` : ''}</div>
       </div>
-      <button class="link" data-movetoday="${x.id}" type="button">${'Today'}</button>
-      <button class="link" data-movetom="${x.id}" type="button">${'Tomorrow'}</button>
-      <button class="row-del" data-del="${x.id}" aria-label="${'Delete'}">${ICON_TRASH}</button>
+      <button class="link" data-movetoday="${x.id}" type="button">Today</button>
+      <button class="link" data-movetom="${x.id}" type="button">Tomorrow</button>
+      <button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>
     </div>`;
 }
 
@@ -580,7 +594,7 @@ function inboxRowHtml(x) {
 
 function newTask(over = {}) {
   return {
-    id: uid(), kind: 'task', title: '', notes: '', date: '', time: '', recurring: 'none',
+    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none',
     flagged: false, context: '', completed: false, lastCompletedDate: null, goalId: null,
     startedDate: '', lastTouchedDate: '', deadline: '', finished: false, finishedDate: null,
     order: Date.now(), createdAt: Date.now(), ...over,
@@ -604,16 +618,17 @@ export function openCaptureSheet(preferred) {
   capArea = preferred || null;
   sheetEl().innerHTML = `
     <div class="sheet-handle"></div>
-    <div class="sheet-title">${'New item'}</div>
-    <input type="text" id="capTitle" placeholder="${'What needs doing?'}">
-    <div class="cap-area-label">${'Where does this go?'}</div>
+    <div class="sheet-title">New item</div>
+    <input type="text" id="capTitle" placeholder="What needs doing?">
+    <textarea id="capNotes" class="sheet-notes" placeholder="Add a description (optional)…" maxlength="2000"></textarea>
+    <div class="cap-area-label">Where does this go?</div>
     <div class="cap-area-grid">
       ${CAP_AREAS().map(a => `<button class="cap-area-btn ${capArea === a.id ? 'active' : ''}" data-area="${a.id}" type="button">${a.label}</button>`).join('')}
     </div>
     <div id="capExtra">${capExtraHtml()}</div>
     <div class="sheet-actions">
-      <button class="sheet-cancel" id="capCancel" type="button">${'Cancel'}</button>
-      <button class="sheet-save" id="capSave" type="button">${'Add'}</button>
+      <button class="sheet-cancel" id="capCancel" type="button">Cancel</button>
+      <button class="sheet-save" id="capSave" type="button">Add</button>
     </div>`;
 
   $('capCancel').addEventListener('click', closeSheet);
@@ -632,25 +647,26 @@ export function openCaptureSheet(preferred) {
 }
 
 function capContextPillHtml() {
-  return `<label class="qo-pill">${'🏷️'}<select id="capContext">
-    <option value="">${'No area'}</option>
+  return `<label class="qo-pill">🏷️<select id="capContext">
+    <option value="">No area</option>
     ${CONTEXTS.map(c => `<option value="${c}">${c}</option>`).join('')}
   </select></label>`;
 }
 function capRepeatPillHtml() {
-  return `<label class="qo-pill">${'🔁'}<select id="capRepeat">
-    <option value="none">${'Once'}</option>
-    <option value="daily">${'daily'}</option>
-    <option value="weekly">${'weekly'}</option>
-    <option value="weekdays">${'weekdays'}</option>
+  return `<label class="qo-pill">🔁<select id="capRepeat">
+    <option value="none">Once</option>
+    <option value="daily">daily</option>
+    <option value="weekly">weekly</option>
+    <option value="weekdays">weekdays</option>
   </select></label>`;
 }
 function capExtraHtml() {
   const commons = `<div class="quickadd-options" style="padding:0;margin-top:10px;">
       ${timePickerContainerHtml('capTime', '', '🕐 Time')}
+      ${estimatePickerContainerHtml('capEstimate', '')}
       ${capRepeatPillHtml()}
       ${capContextPillHtml()}
-      <button class="qo-flag" id="capFlag" type="button" data-on="0">${'🚩 Flag'}</button>
+      <button class="qo-flag" id="capFlag" type="button" data-on="0">🚩 Flag</button>
     </div>`;
 
   if (capArea === 'today') return `<div class="cap-extra-group">${commons}</div>`;
@@ -658,22 +674,23 @@ function capExtraHtml() {
   if (capArea === 'goal') return `<div class="cap-extra-group">${dateStripWrapHtml('capDeadline')}</div>`;
   if (capArea === 'ongoing') {
     return `<div class="cap-extra-group">
-      <div class="quickadd-options" style="padding:0;margin-top:10px;">${capContextPillHtml()}</div>
-      <div class="cap-extra-note">${'Starts today. Log progress from the Today screen until you mark it finished.'}</div></div>`;
+      <div class="quickadd-options" style="padding:0;margin-top:10px;">${estimatePickerContainerHtml('capEstimate', '')}${capContextPillHtml()}</div>
+      <div class="cap-extra-note">Starts today. Log progress from the Today screen until you mark it finished.</div></div>`;
   }
   if (capArea === 'inbox') {
     return `<div class="cap-extra-group">
       <div class="quickadd-options" style="padding:0;margin-top:10px;">${capContextPillHtml()}</div>
-      <div class="cap-extra-note">${'No date — sits in the Inbox until you schedule it.'}</div></div>`;
+      <div class="cap-extra-note">No date — sits in the Inbox until you schedule it.</div></div>`;
   }
   if (capArea === 'diary') {
     return `<div class="cap-extra-group">
-      <div class="cap-extra-note">${'Opens today’s diary and drops this text under the topic you pick.'}</div></div>`;
+      <div class="cap-extra-note">Opens today’s diary and drops this text under the topic you pick.</div></div>`;
   }
-  return `<div class="cap-extra-note">${'Pick where this goes first.'}</div>`;
+  return `<div class="cap-extra-note">Pick where this goes first.</div>`;
 }
 function wireCapExtra() {
   wireTimePicker('capTime', '🕐 Time');
+  wireEstimatePicker('capEstimate');
   const flag = $('capFlag');
   if (flag) flag.addEventListener('click', () => {
     const on = flag.dataset.on !== '1';
@@ -694,6 +711,8 @@ function submitCapture() {
   const recurring = $('capRepeat') ? $('capRepeat').value : 'none';
   const flagged = $('capFlag') ? $('capFlag').dataset.on === '1' : false;
   const context = $('capContext') ? $('capContext').value : '';
+  const notes = $('capNotes') ? $('capNotes').value.trim() : '';
+  const estimate = getEstimatePickerValue('capEstimate');
 
   if (capArea === 'diary') {
     closeSheet();
@@ -702,15 +721,15 @@ function submitCapture() {
   }
 
   if (capArea === 'today') {
-    items.push(newTask({ title, date: TODAY(), time, recurring, flagged, context }));
+    items.push(newTask({ title, notes, estimate, date: TODAY(), time, recurring, flagged, context }));
   } else if (capArea === 'week') {
-    items.push(newTask({ title, date: getDateStripValue('capWeekDay') || addDays(TODAY(), 1), time, recurring, flagged, context }));
+    items.push(newTask({ title, notes, estimate, date: getDateStripValue('capWeekDay') || addDays(TODAY(), 1), time, recurring, flagged, context }));
   } else if (capArea === 'inbox') {
-    items.push(newTask({ title, context }));
+    items.push(newTask({ title, notes, context }));
   } else if (capArea === 'ongoing') {
-    items.push(newTask({ title, kind: 'ongoing', context, startedDate: TODAY(), lastTouchedDate: TODAY() }));
+    items.push(newTask({ title, notes, estimate, kind: 'ongoing', context, startedDate: TODAY(), lastTouchedDate: TODAY() }));
   } else if (capArea === 'goal') {
-    items.push(newTask({ title, kind: 'goal', deadline: getDateStripValue('capDeadline') || addDays(TODAY(), 14) }));
+    items.push(newTask({ title, notes, kind: 'goal', deadline: getDateStripValue('capDeadline') || addDays(TODAY(), 14) }));
   }
   save();
   refresh();
@@ -728,63 +747,65 @@ export function openPlannerEditor(id) {
 }
 
 function notesFieldHtml(x) {
-  return `<textarea id="editNotes" class="sheet-notes" placeholder="${'More detail or explanation…'}" maxlength="2000">${escapeHtml(x.notes || '')}</textarea>`;
+  return `<textarea id="editNotes" class="sheet-notes" placeholder="More detail or explanation…" maxlength="2000">${escapeHtml(x.notes || '')}</textarea>`;
 }
 
 function editorHtml(x) {
   const actions = `<div class="sheet-actions">
-      <button class="sheet-cancel" id="sheetCancel" type="button">${'Cancel'}</button>
-      <button class="sheet-delete" id="sheetDelete" type="button">${'Delete'}</button>
-      <button class="sheet-save" id="sheetSave" type="button">${'Save'}</button>
+      <button class="sheet-cancel" id="sheetCancel" type="button">Cancel</button>
+      <button class="sheet-delete" id="sheetDelete" type="button">Delete</button>
+      <button class="sheet-save" id="sheetSave" type="button">Save</button>
     </div>`;
 
   if (x.kind === 'goal') {
     return `<div class="sheet-handle"></div>
-      <div class="sheet-title">${'Edit goal'}</div>
+      <div class="sheet-title">Edit goal</div>
       <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
       ${notesFieldHtml(x)}
-      <div class="fname" style="margin-bottom:8px;">${'Deadline'}</div>
+      <div class="fname" style="margin-bottom:8px;">Deadline</div>
       ${dateStripWrapHtml('editDeadline')}
       ${actions}`;
   }
   if (x.kind === 'ongoing') {
     return `<div class="sheet-handle"></div>
-      <div class="sheet-title">${'Edit project'}</div>
+      <div class="sheet-title">Edit project</div>
       <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
       ${notesFieldHtml(x)}
       <div class="field-group">
-        <div class="field-row"><span class="fname">${'Started'}</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.startedDate)}</span></div>
-        <div class="field-row"><span class="fname">${'Last touched'}</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.lastTouchedDate || x.startedDate)}</span></div>
+        <div class="field-row"><span class="fname">Started</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.startedDate)}</span></div>
+        <div class="field-row"><span class="fname">Last touched</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.lastTouchedDate || x.startedDate)}</span></div>
+        <div class="field-row"><span class="fname">Estimate</span>${estimatePickerContainerHtml('editEstimate', x.estimate || '')}</div>
       </div>
       ${actions}`;
   }
   return `<div class="sheet-handle"></div>
-    <div class="sheet-title">${'Edit task'}</div>
+    <div class="sheet-title">Edit task</div>
     <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
     ${notesFieldHtml(x)}
     <div class="sheet-move-row">
-      <button class="sheet-move-btn" id="moveTodayBtn" type="button">${'Today'}</button>
-      <button class="sheet-move-btn" id="moveTomBtn" type="button">${'Tomorrow'}</button>
-      <button class="sheet-move-btn" id="moveNoneBtn" type="button">${'No date'}</button>
+      <button class="sheet-move-btn" id="moveTodayBtn" type="button">Today</button>
+      <button class="sheet-move-btn" id="moveTomBtn" type="button">Tomorrow</button>
+      <button class="sheet-move-btn" id="moveNoneBtn" type="button">No date</button>
     </div>
     <div class="field-group">
-      <div class="field-row"><span class="fname">${'Date'}</span><input type="date" id="editDate" value="${x.date || ''}"></div>
-      <div class="field-row"><span class="fname">${'Time'}</span>${timePickerContainerHtml('editTime', x.time || '', '🕐 Time')}</div>
-      <div class="field-row"><span class="fname">${'Repeats'}</span>
+      <div class="field-row"><span class="fname">Date</span><input type="date" id="editDate" value="${x.date || ''}"></div>
+      <div class="field-row"><span class="fname">Time</span>${timePickerContainerHtml('editTime', x.time || '', '🕐 Time')}</div>
+      <div class="field-row"><span class="fname">Estimate</span>${estimatePickerContainerHtml('editEstimate', x.estimate || '')}</div>
+      <div class="field-row"><span class="fname">Repeats</span>
         <select id="editRecur">
-          <option value="none" ${x.recurring === 'none' ? 'selected' : ''}>${'Once'}</option>
-          <option value="daily" ${x.recurring === 'daily' ? 'selected' : ''}>${'daily'}</option>
-          <option value="weekly" ${x.recurring === 'weekly' ? 'selected' : ''}>${'weekly'}</option>
-          <option value="weekdays" ${x.recurring === 'weekdays' ? 'selected' : ''}>${'weekdays'}</option>
+          <option value="none" ${x.recurring === 'none' ? 'selected' : ''}>Once</option>
+          <option value="daily" ${x.recurring === 'daily' ? 'selected' : ''}>daily</option>
+          <option value="weekly" ${x.recurring === 'weekly' ? 'selected' : ''}>weekly</option>
+          <option value="weekdays" ${x.recurring === 'weekdays' ? 'selected' : ''}>weekdays</option>
         </select>
       </div>
-      <div class="field-row"><span class="fname">${'Area'}</span>
+      <div class="field-row"><span class="fname">Area</span>
         <select id="editContext">
           <option value="" ${!x.context ? 'selected' : ''}>&mdash;</option>
           ${CONTEXTS.map(c => `<option value="${c}" ${x.context === c ? 'selected' : ''}>${c}</option>`).join('')}
         </select>
       </div>
-      <div class="toggle-row"><span class="fname">${'Flagged'}</span>
+      <div class="toggle-row"><span class="fname">Flagged</span>
         <button class="ios-switch ${x.flagged ? 'on' : ''}" id="editFlagToggle" data-on="${x.flagged ? '1' : '0'}" type="button"><span class="thumb"></span></button>
       </div>
     </div>
@@ -802,6 +823,7 @@ function wireEditor(x) {
     $('moveTomBtn').addEventListener('click', () => { $('editDate').value = addDays(TODAY(), 1); });
     $('moveNoneBtn').addEventListener('click', () => { $('editDate').value = ''; });
     wireTimePicker('editTime', '🕐 Time');
+    wireEstimatePicker('editEstimate');
     const flag = $('editFlagToggle');
     flag.addEventListener('click', () => {
       const on = flag.dataset.on !== '1';
@@ -821,6 +843,7 @@ function wireEditor(x) {
     } else if (x.kind === 'task') {
       x.date = $('editDate').value || '';
       x.time = getTimePickerValue('editTime');
+      x.estimate = getEstimatePickerValue('editEstimate');
       x.recurring = $('editRecur').value;
       x.context = $('editContext').value || '';
       x.flagged = $('editFlagToggle').dataset.on === '1';

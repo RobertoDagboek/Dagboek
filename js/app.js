@@ -418,7 +418,7 @@ function loginError(e, creating) {
   if (/USERNAME_TAKEN|already|exists|registered/i.test(msg)) return 'That name is already taken. Pick another.';
   if (/[Ss]ignups? not allowed|signup_disabled/i.test(msg)) return 'New accounts are disabled in Supabase.';
   if (/Invalid login credentials/i.test(msg)) return 'No account with that name and PIN. Press “New account” below.';
-  return creating ? msg : `${'Wrong name or PIN.'} (${msg})`;
+  return creating ? msg : `Wrong name or PIN. (${msg})`;
 }
 
 /* ===================== settings ===================== */
@@ -427,48 +427,48 @@ function openSettings() {
   const s = settings();
   sheetEl().innerHTML = `
     <div class="sheet-handle"></div>
-    <div class="sheet-title">${'Settings'}</div>
+    <div class="sheet-title">Settings</div>
 
     <div class="field-group">
-      <div class="field-row"><span class="fname">${'Username'}</span>
+      <div class="field-row"><span class="fname">Username</span>
         <input type="text" id="setUsername" value="${s.username}" autocapitalize="none" spellcheck="false"></div>
-      <div class="field-row"><span class="fname">${'Change name'}</span>
-        <button class="link" id="btnRename" type="button">${'Save'}</button></div>
+      <div class="field-row"><span class="fname">Change name</span>
+        <button class="link" id="btnRename" type="button">Save</button></div>
     </div>
-    <p class="sheet-hint">${'Your name is just a label — change it freely. Your login, your PIN and your data stay exactly as they are.'}</p>
+    <p class="sheet-hint">Your name is just a label — change it freely. Your login, your PIN and your data stay exactly as they are.</p>
 
     <div class="field-group" style="margin-top:14px;">
-      <div class="field-row"><span class="fname">${'OpenAI key'}</span>
+      <div class="field-row"><span class="fname">OpenAI key</span>
         <input type="password" id="setOpenai" value="${openAIKey()}" placeholder="sk-..." autocomplete="off" spellcheck="false"></div>
-      <div class="field-row"><span class="fname">${'Speech model'}</span>
+      <div class="field-row"><span class="fname">Speech model</span>
         <select id="setModel">
           <option value="gpt-4o-transcribe" ${s.model === 'gpt-4o-transcribe' ? 'selected' : ''}>gpt-4o-transcribe</option>
           <option value="gpt-4o-mini-transcribe" ${s.model === 'gpt-4o-mini-transcribe' ? 'selected' : ''}>gpt-4o-mini-transcribe</option>
           <option value="whisper-1" ${s.model === 'whisper-1' ? 'selected' : ''}>whisper-1</option>
         </select></div>
-      <div class="field-row"><span class="fname">${'Voice note language'}</span>
+      <div class="field-row"><span class="fname">Voice note language</span>
         <select id="setSttLang">
-          <option value="" ${!s.sttLang ? 'selected' : ''}>${'Auto (AF + EN)'}</option>
+          <option value="" ${!s.sttLang ? 'selected' : ''}>Auto (AF + EN)</option>
           <option value="af" ${s.sttLang === 'af' ? 'selected' : ''}>Afrikaans</option>
           <option value="en" ${s.sttLang === 'en' ? 'selected' : ''}>English</option>
         </select></div>
     </div>
-    <p class="sheet-hint">${'Encrypted with your PIN and kept in this browser only — never on GitHub or Supabase.'}</p>
+    <p class="sheet-hint">Encrypted with your PIN and kept in this browser only — never on GitHub or Supabase.</p>
 
-    <div class="fname" style="margin:14px 2px 6px;">${'Word list'}</div>
+    <div class="fname" style="margin:14px 2px 6px;">Word list</div>
     <textarea id="setVocab" class="sheet-notes" placeholder="Riebeeck-Kasteel, oupa Hennie, bakkie">${s.vocab}</textarea>
-    <p class="sheet-hint">${'Names of people, places and words you use often, comma separated. This helps a lot with accents and proper nouns.'}</p>
+    <p class="sheet-hint">Names of people, places and words you use often, comma separated. This helps a lot with accents and proper nouns.</p>
 
     <div class="sheet-move-row" style="margin-top:16px;">
-      <button class="sheet-move-btn" id="btnChangePin" type="button">${'Change PIN'}</button>
-      <button class="sheet-move-btn" id="btnExport" type="button">${'Download everything'}</button>
-      <button class="sheet-move-btn" id="btnSignout" type="button" style="color:var(--sys-red);">${'Sign out'}</button>
+      <button class="sheet-move-btn" id="btnChangePin" type="button">Change PIN</button>
+      <button class="sheet-move-btn" id="btnExport" type="button">Download everything</button>
+      <button class="sheet-move-btn" id="btnSignout" type="button" style="color:var(--sys-red);">Sign out</button>
     </div>
     <p class="sheet-hint" id="setStatus"></p>
 
     <div class="sheet-actions">
-      <button class="sheet-cancel" id="setCancel" type="button">${'Cancel'}</button>
-      <button class="sheet-save" id="setSave" type="button">${'Save'}</button>
+      <button class="sheet-cancel" id="setCancel" type="button">Cancel</button>
+      <button class="sheet-save" id="setSave" type="button">Save</button>
     </div>`;
 
   $('setCancel').addEventListener('click', closeSheet);

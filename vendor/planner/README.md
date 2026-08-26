@@ -2,8 +2,8 @@
 
 Drop each version your brother sends in here, unchanged, named by version:
 
-    vendor/planner/planner_9.html      <- the one this app was built from
-    vendor/planner/planner_10.html     <- the next one, when it arrives
+    vendor/planner/planner.html        <- the current one
+    vendor/planner/planner_next.html   <- the next one, when it arrives
 
 Then extract it so the code can be diffed like normal source:
 
