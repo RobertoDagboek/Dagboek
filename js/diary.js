@@ -10,7 +10,7 @@ import { settings, openAIKey } from './config.js';
 import * as db from './supa.js';
 import { Recorder } from './recorder.js';
 import { transcribe } from './transcribe.js';
-import { currentPosition, placeName, coordText, mapsLink } from './geo.js';
+import { bestPosition, placeName, coordText, coordDMS, accuracyText, mapsLink } from './geo.js';
 import { preparePhoto, localPreview } from './photos.js';
 import {
   isVideo, readVideo, humanSize, clockTime,
@@ -411,6 +411,7 @@ async function saveEntry(loud = false) {
       lat: state.loc?.lat ?? null,
       lng: state.loc?.lng ?? null,
       place: state.loc?.place ?? null,
+      accuracy: state.loc?.accuracy ?? null,
     };
     if (state.entry?.id) patch.id = state.entry.id;
 
@@ -532,8 +533,15 @@ async function grabLocation() {
   const box = $('locView');
   box.innerHTML = `<span class="chip">${t('entry.locating')}</span>`;
   try {
-    const pos = await currentPosition();
-    state.loc = { lat: pos.lat, lng: pos.lng, place: await placeName(pos.lat, pos.lng) };
+    // Show each better reading as it arrives, so a slow lock does not look stuck.
+    const fix = await bestPosition({
+      seconds: 6,
+      goodEnough: 10,
+      onFix: f => {
+        box.innerHTML = `<span class="chip">${t('entry.locking', { acc: accuracyText(f.accuracy) })}</span>`;
+      },
+    });
+    state.loc = { ...fix, place: await placeName(fix.lat, fix.lng) };
     dirty = true;
   } catch {
     state.loc = null;
@@ -541,14 +549,28 @@ async function grabLocation() {
   }
   renderLocation();
 }
+
 function renderLocation() {
   const box = $('locView');
   if (!box) return;
   box.innerHTML = '';
   if (!state.loc) return;
-  const { lat, lng, place } = state.loc;
-  const chip = document.createElement('span');
-  chip.className = 'chip';
+  box.appendChild(locationChips(state.loc, () => {
+    state.loc = null; dirty = true; renderLocation();
+  }));
+}
+
+/**
+ * A place is shown as three things, because they answer different questions:
+ * the name (where is this?), the coordinates (exactly where?), and the accuracy
+ * (how much should I trust it?).
+ */
+function locationChips(loc, onClear) {
+  const frag = document.createDocumentFragment();
+  const { lat, lng, place, accuracy } = loc;
+
+  const nameChip = document.createElement('span');
+  nameChip.className = 'chip';
   const link = document.createElement('a');
   link.href = mapsLink(lat, lng);
   link.target = '_blank';
@@ -556,13 +578,41 @@ function renderLocation() {
   link.style.color = 'var(--sys-blue)';
   link.style.textDecoration = 'none';
   link.textContent = place || coordText(lat, lng);
-  chip.appendChild(link);
-  const x = document.createElement('button');
-  x.type = 'button';
-  x.textContent = '×';
-  x.addEventListener('click', () => { state.loc = null; dirty = true; renderLocation(); });
-  chip.appendChild(x);
-  box.appendChild(chip);
+  nameChip.appendChild(link);
+  if (onClear) {
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.textContent = '×';
+    x.addEventListener('click', onClear);
+    nameChip.appendChild(x);
+  }
+  frag.appendChild(nameChip);
+
+  // Tap the numbers to copy them.
+  const coordChip = document.createElement('button');
+  coordChip.type = 'button';
+  coordChip.className = 'chip';
+  coordChip.style.fontVariantNumeric = 'tabular-nums';
+  coordChip.textContent = coordText(lat, lng);
+  coordChip.title = coordDMS(lat, lng);
+  coordChip.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(coordText(lat, lng));
+      toast(t('entry.copied'));
+    } catch {
+      toast(coordText(lat, lng));
+    }
+  });
+  frag.appendChild(coordChip);
+
+  if (accuracy != null) {
+    const accChip = document.createElement('span');
+    accChip.className = 'chip';
+    accChip.style.color = accuracy > 100 ? 'var(--sys-orange)' : 'var(--label-tertiary)';
+    accChip.textContent = accuracyText(accuracy);
+    frag.appendChild(accChip);
+  }
+  return frag;
 }
 
 /* ===================== photos and video ===================== */
@@ -600,13 +650,22 @@ async function uploadPhoto(file) {
   const prep = await preparePhoto(file);
   const path = db.userPath(state.session.user.id, state.date, `foto-${stamp('jpg')}`);
   await db.uploadFile(path, prep.blob, 'image/jpeg');
+
+  // A photo carrying GPS keeps its own place - where the picture was taken,
+  // which is not always where you were when you wrote the entry.
+  const hasGps = prep.lat != null && prep.lng != null;
+  const place = hasGps ? await placeName(prep.lat, prep.lng) : null;
+
   const row = await db.addPhotoRow({
     entry_id: state.entry.id, path, kind: 'photo',
     width: prep.width, height: prep.height, bytes: prep.blob.size,
-    taken_at: prep.takenAt, lat: prep.lat, lng: prep.lng, sort: state.media.length,
+    taken_at: prep.takenAt, lat: prep.lat, lng: prep.lng, place,
+    sort: state.media.length,
   });
-  if (!state.loc && prep.lat != null && prep.lng != null) {
-    state.loc = { lat: prep.lat, lng: prep.lng, place: await placeName(prep.lat, prep.lng) };
+
+  // ...and fills in the day's location if you have not set one.
+  if (!state.loc && hasGps) {
+    state.loc = { lat: prep.lat, lng: prep.lng, place, accuracy: null };
     renderLocation();
     saveEntry();
   }
@@ -642,7 +701,7 @@ async function uploadVideo(file) {
   });
 }
 
-function mediaNode({ preview, busy = false, video = false, duration = 0, onRemove, onOpen }) {
+function mediaNode({ preview, busy = false, video = false, duration = 0, located = false, onRemove, onOpen }) {
   const div = document.createElement('div');
   div.className = 'photo' + (busy ? ' is-busy' : '');
   const img = document.createElement('img');
@@ -654,6 +713,12 @@ function mediaNode({ preview, busy = false, video = false, duration = 0, onRemov
     badge.className = 'play';
     badge.textContent = duration ? clockTime(duration) : '▶';
     div.appendChild(badge);
+  }
+  if (located) {
+    const pin = document.createElement('span');
+    pin.className = 'pin-badge';
+    pin.textContent = '📍';
+    div.appendChild(pin);
   }
   if (onOpen) { div.classList.add('is-open'); img.addEventListener('click', onOpen); }
   if (onRemove) {
@@ -674,7 +739,7 @@ function renderMedia() {
   for (const m of state.media) {
     const isVid = m.kind === 'video';
     const node = mediaNode({
-      preview: '', video: isVid, duration: m.duration,
+      preview: '', video: isVid, duration: m.duration, located: m.lat != null,
       onRemove: () => removeMedia(m),
       onOpen: () => openViewer(m),
     });
@@ -706,6 +771,7 @@ export async function openViewer(m) {
     const img = document.createElement('img');
     img.src = url;
     body.appendChild(img);
+    body.appendChild(mediaLocationPanel(m));
     return;
   }
 
@@ -714,6 +780,8 @@ export async function openViewer(m) {
   v.playsInline = true;
   if (m.poster_path) db.fileUrl(m.poster_path).then(p => { if (p) v.poster = p; });
   body.appendChild(v);
+
+  body.appendChild(mediaLocationPanel(m));
 
   const parts = m.part_count || 1;
   if (parts === 1) {
@@ -742,6 +810,88 @@ export async function openViewer(m) {
   } catch (e) {
     note.textContent = e.message;
   }
+}
+
+/**
+ * Where this particular picture was taken. Photos from a phone usually carry
+ * it in their EXIF; anything else - a screenshot, a scan, a photo someone sent
+ * you - has none, so you can attach your current position by hand.
+ */
+function mediaLocationPanel(m) {
+  const wrap = document.createElement('div');
+  wrap.className = 'media-loc';
+
+  const draw = () => {
+    wrap.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'chip-row';
+
+    if (m.lat != null) {
+      row.appendChild(locationChips(
+        { lat: m.lat, lng: m.lng, place: m.place, accuracy: m.accuracy },
+        null,
+      ));
+    } else {
+      const none = document.createElement('span');
+      none.className = 'chip';
+      none.style.color = 'var(--label-tertiary)';
+      none.textContent = t('media.noLocation');
+      row.appendChild(none);
+    }
+    wrap.appendChild(row);
+
+    const actions = document.createElement('div');
+    actions.className = 'chip-row';
+    actions.style.marginTop = '8px';
+
+    const setBtn = document.createElement('button');
+    setBtn.type = 'button';
+    setBtn.className = 'chip';
+    setBtn.style.color = 'var(--sys-blue)';
+    setBtn.textContent = m.lat != null ? t('media.relocate') : t('media.setLocation');
+    setBtn.addEventListener('click', async () => {
+      setBtn.disabled = true;
+      setBtn.textContent = t('entry.locating');
+      try {
+        const fix = await bestPosition({
+          seconds: 6,
+          goodEnough: 10,
+          onFix: f => { setBtn.textContent = t('entry.locking', { acc: accuracyText(f.accuracy) }); },
+        });
+        const place = await placeName(fix.lat, fix.lng);
+        await db.updatePhotoRow(m.id, { lat: fix.lat, lng: fix.lng, place, accuracy: fix.accuracy });
+        Object.assign(m, { ...fix, place });
+        renderMedia();
+        draw();
+        toast(t('media.located'));
+      } catch {
+        toast(t('entry.locFail'));
+        draw();
+      }
+    });
+    actions.appendChild(setBtn);
+
+    if (m.lat != null) {
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'chip';
+      clearBtn.style.color = 'var(--sys-red)';
+      clearBtn.textContent = t('media.clearLocation');
+      clearBtn.addEventListener('click', async () => {
+        try {
+          await db.updatePhotoRow(m.id, { lat: null, lng: null, place: null, accuracy: null });
+          Object.assign(m, { lat: null, lng: null, place: null, accuracy: null });
+          renderMedia();
+          draw();
+        } catch (e) { toast(e.message); }
+      });
+      actions.appendChild(clearBtn);
+    }
+    wrap.appendChild(actions);
+  };
+
+  draw();
+  return wrap;
 }
 
 export function closeViewer() {

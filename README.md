@@ -245,6 +245,34 @@ minute, so expect around 50–80 short clips before you need to prune or upgrade
 and only a handful if they are large ones. Photos are negligible by comparison
 at ~200 KB each after resizing.
 
+## Locations
+
+**The day's location** uses the best fix it can get, not the first one. Tapping
+*Gebruik my plek* watches the GPS for up to six seconds and keeps the most
+accurate reading, stopping early once it is within 10m. The first answer a phone
+gives is usually wifi or cell-tower triangulation and can be a kilometre out;
+the GPS catches up a second or two later.
+
+It also never accepts a cached fix (`maximumAge: 0`). The old code allowed a
+position up to a minute old, which after a drive could be the previous town.
+
+You get three things back, because they answer different questions:
+
+| | |
+|---|---|
+| **Place name** | Where is this? Links to Google Maps. |
+| **Coordinates** | Exactly where? Six decimals, about 10cm. Tap to copy. |
+| **Accuracy** | How much should I trust it? Turns orange past 100m. |
+
+**Photos carry their own location.** A phone photo usually has GPS in its EXIF,
+and that is read before the image is re-encoded (canvas re-encoding strips it).
+Located media shows a 📍 in the corner of the grid.
+
+For anything without GPS - a screenshot, a scan, a photo someone sent you - open
+it and use *Gebruik my plek* to attach where you are now. This is per photo and
+separate from the day's location, because where a picture was taken is often not
+where you were sitting when you wrote the entry.
+
 ## Checking it still works
 
 ```powershell

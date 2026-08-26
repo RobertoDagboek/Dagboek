@@ -523,3 +523,17 @@ mark { background: rgba(10,132,255,0.3); color: inherit; border-radius: 3px; pad
 }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* a picture that knows where it was taken */
+.photo .pin-badge {
+  position: absolute; top: 4px; left: 4px;
+  font-size: 11px; line-height: 1;
+  padding: 3px 4px; border-radius: 6px;
+  background: rgba(0,0,0,0.6); pointer-events: none;
+}
+.media-loc {
+  margin-top: 14px; padding: 12px;
+  background: rgba(28,28,30,0.85); border-radius: var(--r-md);
+  max-width: 520px;
+}
+.media-loc .chip-row { justify-content: center; }

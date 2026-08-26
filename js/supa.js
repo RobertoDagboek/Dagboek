@@ -111,8 +111,8 @@ export async function myHandle() {
 
 /* ----------------------------- entries ---------------------------- */
 
-const ENTRY_COLS = 'id, entry_date, text, sections, audio_path, lat, lng, place, tags, created_at, updated_at';
-const MEDIA_COLS = 'id, path, kind, width, height, duration, poster_path, bytes, part_count, mime, taken_at, lat, lng, sort';
+const ENTRY_COLS = 'id, entry_date, text, sections, audio_path, lat, lng, place, accuracy, tags, created_at, updated_at';
+const MEDIA_COLS = 'id, path, kind, width, height, duration, poster_path, bytes, part_count, mime, taken_at, lat, lng, place, accuracy, sort';
 
 /** The entry for one date, with its photos and clips. Null when nothing is written yet. */
 export async function getEntry(date) {
@@ -212,6 +212,12 @@ export async function storageUsed() {
 
 export async function addPhotoRow(row) {
   const { data, error } = await supa().from('entry_photos').insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updatePhotoRow(id, patch) {
+  const { data, error } = await supa().from('entry_photos').update(patch).eq('id', id).select().single();
   if (error) throw error;
   return data;
 }
