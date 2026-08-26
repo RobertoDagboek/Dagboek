@@ -1,4 +1,5 @@
 import { settings, openAIKey } from '../core/config.js';
+import { triggerHints } from './reminders.js';
 
 const ENDPOINT = 'https://api.openai.com/v1/audio/transcriptions';
 const MAX_BYTES = 25 * 1024 * 1024; // OpenAI audio upload limit
@@ -20,7 +21,9 @@ function buildPrompt(vocab) {
     .split(/[,\n]/)
     .map(w => w.trim())
     .filter(Boolean);
-  let prompt = STEER_AF;
+  // The app watches for these phrases afterwards, so it matters that they
+  // are transcribed as spoken rather than approximated.
+  let prompt = `${STEER_AF} Frases wat presies so geskryf moet word: ${triggerHints().join(', ')}.`;
   if (words.length) {
     prompt += ` Eiename en woorde wat in hierdie opname kan voorkom: ${words.join(', ')}.`;
   }

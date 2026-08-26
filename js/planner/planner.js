@@ -34,7 +34,7 @@ const TODAY = () => todayStr();
 /* ===================== helpers ===================== */
 
 export function appliesOnDate(t2, dateStr) {
-  if (t2.kind !== 'task') return false;
+  if (t2.kind !== 'task' || t2.draft) return false;
   if (t2.recurring === 'daily') return true;
   if (t2.recurring === 'weekdays') { const dow = parseDateStr(dateStr).getDay(); return dow >= 1 && dow <= 5; }
   if (t2.recurring === 'days') {
@@ -49,10 +49,12 @@ function isDoneOnDate(t2, dateStr) {
 }
 function isCarried(t2) { return t2.kind === 'task' && t2.recurring === 'none' && t2.date && t2.date < TODAY() && !t2.completed; }
 function daysOverdue(t2) { return Math.max(0, daysBetween(t2.date, TODAY())); }
-export function isInboxTask(t2) { return t2.kind === 'task' && t2.recurring === 'none' && !t2.date; }
+export function isInboxTask(t2) { return t2.kind === 'task' && !t2.draft && t2.recurring === 'none' && !t2.date; }
+export function drafts() { return items.filter(x => x.draft); }
+export function draftCount() { return drafts().length; }
 function matchesContext(t2) { return activeContext === 'All' || t2.context === activeContext; }
 
-export function inboxCount() { return items.filter(isInboxTask).length; }
+export function inboxCount() { return items.filter(isInboxTask).length + draftCount(); }
 export function goalsSoonCount() {
   return items.filter(x => x.kind === 'goal' && !x.finished && daysBetween(TODAY(), x.deadline) <= 3).length;
 }
@@ -103,6 +105,14 @@ export function renderToday() {
 
   let html = contextFilterHtml();
 
+  const pending = draftCount();
+  if (pending) {
+    html += `<div class="goal-banner draft-banner" id="draftNudge">
+      <div class="goal-banner-title">From your diary</div>
+      <div class="goal-banner-item"><span class="gname">${pending} reminder${pending === 1 ? '' : 's'} waiting to be finished</span><span class="gdays">Inbox &rsaquo;</span></div>
+    </div>`;
+  }
+
   if (goalsSoon.length) {
     html += `<div class="goal-banner">
       <div class="goal-banner-title">Goals coming up</div>
@@ -129,6 +139,7 @@ export function renderToday() {
   wireOngoingRows(el);
   wireContextFilter(el);
   el.querySelectorAll('[data-goalbanner]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-goalbanner'))));
+  $('draftNudge')?.addEventListener('click', () => document.dispatchEvent(new CustomEvent('app:goto', { detail: { screen: 'inbox' } })));
 }
 
 function ongoingRowHtml(x) {
@@ -566,6 +577,14 @@ export function renderInbox() {
   const list = items.filter(x => isInboxTask(x) && matchesContext(x)).sort((a, b) => (b.order || 0) - (a.order || 0));
 
   let html = contextFilterHtml();
+
+  const pending = drafts();
+  if (pending.length) {
+    html += `<div class="section-title">From your diary &nbsp;&middot;&nbsp; not finished</div><div class="group">`;
+    html += pending.map(draftRowHtml).join('');
+    html += `</div>`;
+  }
+
   html += `<div class="section-title">Unscheduled</div><div class="group">`;
   html += list.length ? list.map(inboxRowHtml).join('') : `<div class="empty-note">Nothing waiting — capture anything here without deciding when.</div>`;
   html += `</div><div class="status-line" id="statusLine"></div>`;
@@ -574,6 +593,10 @@ export function renderInbox() {
   wireContextFilter(el);
   el.querySelectorAll('[data-body]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-body'))));
   el.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => requestDelete(e.currentTarget.getAttribute('data-del'), e.currentTarget)));
+  el.querySelectorAll('[data-keepdraft]').forEach(b => b.addEventListener('click', e => {
+    const x = items.find(i => i.id === e.currentTarget.getAttribute('data-keepdraft'));
+    if (x) { x.draft = false; save(); refresh(); }
+  }));
   el.querySelectorAll('[data-movetoday]').forEach(b => b.addEventListener('click', e => {
     const x = items.find(i => i.id === e.currentTarget.getAttribute('data-movetoday'));
     if (x) { x.date = TODAY(); save(); refresh(); }
@@ -582,6 +605,21 @@ export function renderInbox() {
     const x = items.find(i => i.id === e.currentTarget.getAttribute('data-movetom'));
     if (x) { x.date = addDays(TODAY(), 1); save(); refresh(); }
   }));
+}
+
+function draftRowHtml(x) {
+  return `<div class="row draft-row">
+      <div class="row-body" data-body="${x.id}">
+        <div class="row-title">${escapeHtml(x.title)}</div>
+        ${x.heard ? `<div class="row-notes">&ldquo;${escapeHtml(x.heard)}&rdquo;</div>` : ''}
+        <div class="row-meta">
+          <span class="meta-chip draft">draft</span>
+          ${x.date ? `<span class="meta-chip">${fmtMonthDay(x.date)}</span>` : ''}
+        </div>
+      </div>
+      <button class="link" data-keepdraft="${x.id}" type="button">Keep</button>
+      <button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>
+    </div>`;
 }
 
 function inboxRowHtml(x) {
@@ -862,6 +900,7 @@ function wireEditor(x) {
     const title = $('editTitle').value.trim();
     if (!title) { $('editTitle').focus(); return; }
     x.title = title;
+    x.draft = false;   // editing and saving is what finishes a draft
     const notes = $('editNotes');
     if (notes) x.notes = notes.value.trim();
     if (x.kind === 'goal') {

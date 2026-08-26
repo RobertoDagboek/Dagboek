@@ -2,7 +2,7 @@
 // online, and the last-known copy when you are not. Cross-origin calls
 // (Supabase, OpenAI, the CDN) are never touched.
 
-const CACHE = 'dagboek-v11';
+const CACHE = 'dagboek-v12';
 const SHELL = [
   './',
   './index.html',
@@ -29,6 +29,7 @@ const SHELL = [
   './js/diary/video.js',
   './js/diary/exif.js',
   './js/diary/geo.js',
+  './js/diary/reminders.js',
 ];
 
 self.addEventListener('install', e => {

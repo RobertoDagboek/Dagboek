@@ -556,3 +556,13 @@ mark { background: rgba(10,132,255,0.3); color: inherit; border-radius: 3px; pad
 }
 .day-toggle.is-on { background: var(--sys-blue); color: #fff; }
 .day-toggle:active { transform: scale(0.94); }
+
+/* a reminder caught while dictating, waiting to be finished */
+.draft-row { border-left: 3px solid var(--sys-yellow); }
+.meta-chip.draft { background: rgba(255,214,10,0.18); color: var(--sys-yellow); font-weight: 700; }
+.draft-banner {
+  background: linear-gradient(160deg, rgba(255,214,10,0.16), rgba(255,214,10,0.05));
+  border-color: rgba(255,214,10,0.3);
+  cursor: pointer;
+}
+.draft-banner .goal-banner-title { color: var(--sys-yellow); }

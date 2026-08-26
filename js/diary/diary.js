@@ -9,6 +9,8 @@ import { settings, openAIKey } from '../core/config.js';
 import * as db from '../core/supa.js';
 import { Recorder } from './recorder.js';
 import { transcribe } from './transcribe.js';
+import { findReminders } from './reminders.js';
+import { items, saveItems } from '../planner/tasks.js';
 import { bestPosition, placeName, coordText, coordDMS, accuracyText, mapsLink } from './geo.js';
 import { preparePhoto, localPreview } from './photos.js';
 import {
@@ -517,6 +519,7 @@ async function runTranscribe() {
   try {
     const text = await transcribe(state.audio.blob, state.audio.ext);
     if (text) appendToTopic(state.topic, text);
+    if (text) catchReminders(text);
     $('transcribeStatus').textContent = text ? `Text goes to “${topicLabel(state.topic)}”` : '';
     await saveEntry();
   } catch (e) {
@@ -524,6 +527,33 @@ async function runTranscribe() {
   } finally {
     btn.disabled = false;
   }
+}
+
+/**
+ * Anything said as "remind me to ..." becomes a draft in the planner. A draft,
+ * not a task: a misheard sentence should never quietly turn into something you
+ * believe you wrote. They wait in the Inbox until confirmed.
+ */
+function catchReminders(text) {
+  const found = findReminders(text, todayStr());
+  if (!found.length) return;
+
+  for (const r of found) {
+    items.push({
+      id: uid(), kind: 'task', title: r.subject, notes: '', estimate: '',
+      date: r.date || '', time: '', recurring: 'none', repeatDays: [],
+      flagged: false, context: '', completed: false, lastCompletedDate: null,
+      goalId: null, startedDate: '', lastTouchedDate: '', deadline: '',
+      finished: false, finishedDate: null,
+      draft: true, source: 'diary', heard: r.heard,
+      order: Date.now(), createdAt: Date.now(),
+    });
+  }
+  saveItems();
+  toast(found.length === 1
+    ? `Reminder saved as a draft: ${found[0].subject}`
+    : `${found.length} reminders saved as drafts`);
+  refresh();
 }
 
 /* ===================== location ===================== */
