@@ -2,7 +2,7 @@
 // online, and the last-known copy when you are not. Cross-origin calls
 // (Supabase, OpenAI, the CDN) are never touched.
 
-const CACHE = 'dagboek-v9';
+const CACHE = 'dagboek-v10';
 const SHELL = [
   './',
   './index.html',
@@ -17,6 +17,7 @@ const SHELL = [
   './js/core/supa.js',
   './js/core/config.js',
   './js/core/crypto.js',
+  './js/core/biometric.js',
   './js/planner/planner.js',
   './js/planner/tasks.js',
   './js/diary/diary.js',

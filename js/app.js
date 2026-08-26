@@ -16,6 +16,7 @@ import {
   encryptWith, decryptWith, cryptoAvailable,
 } from './core/crypto.js';
 import * as db from './core/supa.js';
+import * as bio from './core/biometric.js';
 import { loadItems } from './planner/tasks.js';
 import {
   $, ICON_PLUS, ICON_TODAY, ICON_WEEK, ICON_GOALS, ICON_INBOX, ICON_DIARY,
@@ -37,9 +38,31 @@ let session = null;
 let cryptoKey = null;
 let pin = { mode: 'unlock', buffer: '', first: '', newUser: '', busy: false };
 let today = todayStr();
+// Held only while unlocked, so Face ID can be switched on without retyping.
+let livePin = null;
 
-const PIN_MIN = 4;
+// New PINs are exactly 4 digits and submit themselves on the fourth tap.
+// PINs made before this could be longer, so unlocking still accepts up to 8:
+// forcing 4 on an existing 6-digit PIN would lock the owner out of their own
+// diary. The length is recorded when a PIN is set, so a known-length PIN
+// auto-submits and an unknown-length one waits for the tick.
+const PIN_LEN = 4;
 const PIN_MAX = 8;
+
+/** The modes where a PIN is being chosen, rather than entered. */
+const SETTING_PIN = new Set(['create', 'confirm', 'change', 'changeConfirm']);
+
+/**
+ * How many digits this screen expects.
+ *   choosing a PIN  -> exactly PIN_LEN
+ *   unlocking       -> whatever this device's PIN was set to
+ *   signing in      -> unknown, so allow the old maximum
+ */
+function pinSlots(mode) {
+  if (SETTING_PIN.has(mode)) return PIN_LEN;
+  if (mode === 'unlock') return getLock()?.len || PIN_MAX;
+  return PIN_MAX;
+}
 
 const TABS = [
   { id: 'today', icon: ICON_TODAY, label: 'Today' },
@@ -225,12 +248,32 @@ function askForPin() {
   startLogin({ mode: known ? 'unlock' : 'signin' });
 }
 
+async function offerBiometric() {
+  const btn = $('bioBtn');
+  if (!btn) return;
+  const usable = bio.isEnrolled() && await bio.isAvailable();
+  btn.hidden = !usable || pin.mode !== 'unlock';
+  if (!usable) return;
+  btn.onclick = async () => {
+    $('pin-msg').textContent = '';
+    try {
+      const value = await bio.unlock();
+      pin.buffer = value;
+      renderPin();
+      pinSubmit();
+    } catch {
+      $('pin-msg').textContent = 'Face ID did not work. Use your PIN.';
+    }
+  };
+}
+
 function startLogin({ mode, newUser = '' }) {
   pin = { mode, buffer: '', first: '', newUser, busy: false };
   showLock();
   $('pin-msg').textContent = '';
   $('pin-user').value = mode === 'unlock' ? '' : settings().username;
   renderPin();
+  offerBiometric();
 }
 
 function renderPin() {
@@ -259,9 +302,10 @@ function renderPin() {
 
   const dots = $('pin-dots');
   dots.innerHTML = '';
-  for (let i = 0; i < PIN_MAX; i++) {
+  const slots = pinSlots(mode);
+  for (let i = 0; i < slots; i++) {
     const dot = document.createElement('span');
-    dot.className = 'pin-dot' + (i < buffer.length ? ' is-on' : '') + (i < PIN_MIN ? '' : ' is-extra');
+    dot.className = 'pin-dot' + (i < buffer.length ? ' is-on' : '') + (i < PIN_LEN ? '' : ' is-extra');
     dots.appendChild(dot);
   }
 }
@@ -270,15 +314,30 @@ function pinPress(k) {
   if (pin.busy) return;
   if (k === 'del') { pin.buffer = pin.buffer.slice(0, -1); return renderPin(); }
   if (k === 'ok') return pinSubmit();
-  if (pin.buffer.length >= PIN_MAX) return;
+  const cap = pinSlots(pin.mode);
+  if (pin.buffer.length >= cap) return;
   pin.buffer += k;
   renderPin();
-  if (pin.mode === 'unlock' && pin.buffer.length === PIN_MAX) pinSubmit();
+  // Only submit itself when the length is certain. Signing in on a new device
+  // has no stored length to go on, so that one waits for the tick.
+  if (pin.mode !== 'signin' && pin.buffer.length === cap) pinSubmit();
 }
 
 async function pinSubmit() {
   const value = pin.buffer;
-  if (value.length < PIN_MIN) { $('pin-msg').textContent = 'At least 4 digits — 6 is safer.'; return; }
+  if (value.length < 4) {
+    $('pin-msg').textContent = SETTING_PIN.has(pin.mode)
+      ? `Your PIN is ${PIN_LEN} digits.`
+      : 'Too short.';
+    return;
+  }
+  // Only when choosing a new PIN is the length fixed. Entering an existing one
+  // must accept whatever length it was set to, or an older PIN could not be
+  // typed at all.
+  if (SETTING_PIN.has(pin.mode) && value.length !== PIN_LEN) {
+    $('pin-msg').textContent = `Your PIN is ${PIN_LEN} digits.`;
+    return;
+  }
 
   if (pin.mode === 'create') {
     const name = slugUser($('pin-user').value);
@@ -318,7 +377,10 @@ async function pinSubmit() {
       const { password, localKey } = await deriveCredentials(accountSlug(), value);
       await db.updatePassword(password);
       const apiKey = openAIKey();
-      setLock({ v: 2, user: username, check: await makeCheck(localKey) });
+      livePin = value;
+      // The old enrolment holds the old PIN, so it is no longer valid.
+      if (bio.isEnrolled()) bio.forget();
+      setLock({ v: 2, user: username, len: value.length, check: await makeCheck(localKey) });
       setSecretBox(apiKey ? await encryptWith(localKey, apiKey) : null);
       cryptoKey = localKey;
       resetFailedTries();
@@ -340,6 +402,7 @@ async function pinSubmit() {
     const { localKey } = await deriveCredentials(accountSlug(), value);
     await verifyCheck(localKey, getLock().check);
     cryptoKey = localKey;
+    livePin = value;
     resetFailedTries();
     const box = getSecretBox();
     setOpenAIKey(box ? await decryptWith(localKey, box) : '');
@@ -387,13 +450,14 @@ async function finishLogin(username, value, { creating }) {
 
     session = await db.getSession();
     cryptoKey = localKey;
+    livePin = value;
 
     if (creating || legacy) {
       try { await db.claimHandle(username, slug); } catch { /* not fatal */ }
     }
 
     saveSettings({ username, slug });
-    setLock({ v: 2, user: username, check: await makeCheck(localKey) });
+    setLock({ v: 2, user: username, len: value.length, check: await makeCheck(localKey) });
     resetFailedTries();
 
     const existing = openAIKey() || takeLegacyPlainKey();
@@ -459,6 +523,12 @@ function openSettings() {
     <textarea id="setVocab" class="sheet-notes" placeholder="Riebeeck-Kasteel, oupa Hennie, bakkie">${s.vocab}</textarea>
     <p class="sheet-hint">Names of people, places and words you use often, comma separated. This helps a lot with accents and proper nouns.</p>
 
+    <div class="field-group" id="bioGroup" hidden>
+      <div class="toggle-row"><span class="fname">Unlock with Face ID</span>
+        <button class="ios-switch" id="bioToggle" type="button"><span class="thumb"></span></button></div>
+    </div>
+    <p class="sheet-hint" id="bioHint"></p>
+
     <div class="sheet-move-row" style="margin-top:16px;">
       <button class="sheet-move-btn" id="btnChangePin" type="button">Change PIN</button>
       <button class="sheet-move-btn" id="btnExport" type="button">Download everything</button>
@@ -486,12 +556,50 @@ function openSettings() {
       closeSheet();
     } catch (e) { toast(e.message); }
   });
+  wireBiometricToggle();
   $('btnRename').addEventListener('click', renameAccount);
   $('btnChangePin').addEventListener('click', () => { closeSheet(); startLogin({ mode: 'change' }); });
   $('btnExport').addEventListener('click', exportAll);
   $('btnSignout').addEventListener('click', async () => { await db.signOut(); location.reload(); });
 
   openSheet();
+}
+
+async function wireBiometricToggle() {
+  const group = $('bioGroup');
+  const toggle = $('bioToggle');
+  const hint = $('bioHint');
+  if (!group) return;
+
+  if (!await bio.isAvailable()) {
+    group.hidden = true;
+    hint.textContent = 'This device has no Face ID or fingerprint reader available to the browser.';
+    return;
+  }
+  group.hidden = false;
+
+  const paint = () => {
+    const on = bio.isEnrolled();
+    toggle.classList.toggle('on', on);
+    hint.textContent = !on
+      ? 'Skip the PIN screen with Face ID. Your PIN still works, and you will need it after a restart.'
+      : bio.enrolmentStrength() === 'strong'
+        ? 'On. Your PIN is encrypted by the Secure Enclave and is unreadable without your face.'
+        : 'On, but this device does not support the stronger method: your PIN is stored here and Face ID only gates the app. Anyone able to read this browser\'s storage could recover it.';
+  };
+  paint();
+
+  toggle.onclick = async () => {
+    if (bio.isEnrolled()) { bio.forget(); paint(); return; }
+    if (!livePin) { hint.textContent = 'Sign out and back in first, so the PIN can be stored.'; return; }
+    try {
+      const strength = await bio.enrol(livePin, settings().username);
+      paint();
+      toast(strength === 'strong' ? 'Face ID on' : 'Face ID on (basic protection)');
+    } catch {
+      hint.textContent = 'Could not set up Face ID.';
+    }
+  };
 }
 
 async function renameAccount() {

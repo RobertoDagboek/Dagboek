@@ -539,3 +539,9 @@ mark { background: rgba(10,132,255,0.3); color: inherit; border-radius: 3px; pad
   max-width: 520px;
 }
 .media-loc .chip-row { justify-content: center; }
+
+/* Face ID button on the lock screen */
+.bio-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 18px; padding: 12px 22px;
+}
