@@ -3,11 +3,10 @@
 // Same features as before - voice note straight to text, topics, tags, photos,
 // video, location - rebuilt out of the planner's parts so it looks native to it.
 
-import { t, lang, formatDate } from './i18n.js';
 import { TOPICS, topicLabel, sectionsToText } from './topics.js';
 import { randomQuote } from './quotes.js';
-import { settings, openAIKey } from './config.js';
-import * as db from './supa.js';
+import { settings, openAIKey } from '../core/config.js';
+import * as db from '../core/supa.js';
 import { Recorder } from './recorder.js';
 import { transcribe } from './transcribe.js';
 import { bestPosition, placeName, coordText, coordDMS, accuracyText, mapsLink } from './geo.js';
@@ -19,7 +18,7 @@ import {
 import {
   $, escapeHtml, uid, todayStr, addDays, fmtDateFull, fmtMonthDay,
   ICON_CHECK, ICON_TRASH, ICON_MIC, ICON_CHEVRON, toast, refresh,
-} from './ui.js';
+} from '../core/ui.js';
 
 /* ===================== state ===================== */
 
@@ -83,7 +82,7 @@ export function renderDiary(seedText) {
 
     <div class="search-row">
       <span class="search-icon">${ICON_CHEVRON}</span>
-      <input type="text" id="diarySearch" placeholder="${t('list.search')}" value="${escapeHtml(state.search)}">
+      <input type="text" id="diarySearch" placeholder="${'Search your diary…'}" value="${escapeHtml(state.search)}">
       ${state.search ? `<button class="search-clear" id="diarySearchClear" type="button">&times;</button>` : ''}
     </div>
 
@@ -122,38 +121,38 @@ async function renderEditor(seedText) {
     <div class="chip-row topic-chips" id="topicChips"></div>
 
     <div class="recorder">
-      <button class="record" id="recBtn" type="button" aria-label="${t('rec.idle')}"><span class="dot"></span></button>
-      <div class="rec-meta"><div id="recLabel">${t('rec.idle')}</div><div class="timer" id="recTime">0:00</div></div>
+      <button class="record" id="recBtn" type="button" aria-label="${'Record a voice note'}"><span class="dot"></span></button>
+      <div class="rec-meta"><div id="recLabel">${'Record a voice note'}</div><div class="timer" id="recTime">0:00</div></div>
       <div class="levels"><div class="level-fill" id="recLevel"></div></div>
     </div>
 
     <audio id="audioPlay" controls hidden></audio>
     <div class="chip-row" id="transcribeRow" hidden style="margin-bottom:12px;">
-      <button class="chip" id="btnTranscribe" type="button">${ICON_MIC} ${t('rec.transcribe')}</button>
-      <button class="link" id="btnDropAudio" type="button">${t('rec.discard')}</button>
+      <button class="chip" id="btnTranscribe" type="button">${ICON_MIC} ${'Turn into text'}</button>
+      <button class="link" id="btnDropAudio" type="button">${'Discard'}</button>
     </div>
     <p class="status-line" id="transcribeStatus" style="text-align:left;margin:0 0 10px;"></p>
 
     <div id="sections"></div>
 
     <div class="block">
-      <div class="block-head"><span>${t('entry.location')}</span>
-        <button class="link" id="btnLocate" type="button">${t('entry.getLocation')}</button></div>
+      <div class="block-head"><span>${'Location'}</span>
+        <button class="link" id="btnLocate" type="button">${'Use my location'}</button></div>
       <div class="chip-row" id="locView"></div>
     </div>
 
     <div class="block">
-      <div class="block-head"><span>${t('entry.tags')}</span></div>
+      <div class="block-head"><span>${'Tags'}</span></div>
       <div class="chip-row" id="tagView"></div>
       <input type="text" class="tag-input" id="tagInput" list="tagOptions" autocapitalize="none"
-             spellcheck="false" placeholder="${t('entry.tagPh')}">
+             spellcheck="false" placeholder="${'Type a tag and press Enter…'}">
       <datalist id="tagOptions"></datalist>
     </div>
 
     <div class="block">
-      <div class="block-head"><span>${t('entry.media')}</span>
-        <label class="link" for="photoInput">${t('entry.addPhotos')}</label>
-        <label class="link" for="videoInput">${t('entry.addVideo')}</label>
+      <div class="block-head"><span>${'Photos and video'}</span>
+        <label class="link" for="photoInput">${'+ Photos'}</label>
+        <label class="link" for="videoInput">${'+ Video'}</label>
         <input id="photoInput" type="file" accept="image/*" multiple hidden>
         <input id="videoInput" type="file" accept="video/*" multiple hidden>
       </div>
@@ -161,10 +160,10 @@ async function renderEditor(seedText) {
     </div>
 
     <div class="sheet-actions">
-      <button class="sheet-save" id="btnSave" type="button">${t('entry.save')}</button>
+      <button class="sheet-save" id="btnSave" type="button">${'Save entry'}</button>
     </div>
     <p class="status-line" id="saveStatus"></p>
-    <div style="text-align:center;"><button class="link danger" id="btnDelete" type="button" hidden>${t('entry.delete')}</button></div>`;
+    <div style="text-align:center;"><button class="link danger" id="btnDelete" type="button" hidden>${'Delete this entry'}</button></div>`;
 
   buildSections();
   buildTopicChips();
@@ -244,7 +243,7 @@ function buildSections() {
     head.className = 'section-label';
     const name = document.createElement('span');
     name.dataset.topicLabel = topic.id;
-    name.textContent = topicLabel(topic.id, lang);
+    name.textContent = topicLabel(topic.id);
     head.appendChild(name);
     const preview = document.createElement('span');
     preview.className = 'section-preview';
@@ -327,7 +326,7 @@ function buildTopicChips() {
     chip.className = 'chip topic-chip' + (topic.id === state.topic ? ' is-on' : '');
     chip.dataset.topic = topic.id;
     chip.type = 'button';
-    chip.textContent = topicLabel(topic.id, lang);
+    chip.textContent = topicLabel(topic.id);
     chip.addEventListener('click', () => setTopic(topic.id));
     row.appendChild(chip);
   }
@@ -336,7 +335,7 @@ function setTopic(id) {
   state.topic = id;
   document.querySelectorAll('.topic-chip').forEach(c => c.classList.toggle('is-on', c.dataset.topic === id));
   if (!state.recorder?.recording && $('recLabel')) {
-    $('recLabel').textContent = t('rec.for', { topic: topicLabel(id, lang) });
+    $('recLabel').textContent = `Recording for: ${topicLabel(id)}`;
   }
 }
 
@@ -389,7 +388,7 @@ async function ensureEntry() {
   if (state.entry?.id) return state.entry;
   const sections = readSections();
   state.entry = await db.upsertEntry({
-    entry_date: state.date, sections, text: sectionsToText(sections, lang), tags: state.tags,
+    entry_date: state.date, sections, text: sectionsToText(sections), tags: state.tags,
   });
   entryDates.add(state.date);
   $('btnDelete').hidden = false;
@@ -400,13 +399,13 @@ async function saveEntry(loud = false) {
   const btn = $('btnSave');
   if (btn) btn.disabled = true;
   const status = $('saveStatus');
-  if (status) status.textContent = t('entry.saving');
+  if (status) status.textContent = 'Saving…';
   try {
     const sections = readSections();
     const patch = {
       entry_date: state.date,
       sections,
-      text: sectionsToText(sections, lang),
+      text: sectionsToText(sections),
       tags: state.tags,
       lat: state.loc?.lat ?? null,
       lng: state.loc?.lng ?? null,
@@ -429,8 +428,8 @@ async function saveEntry(loud = false) {
     dirty = false;
     renderAudio();
     renderSavedAudio();
-    if (status) status.textContent = t('entry.saved');
-    if (loud) toast(t('entry.saved'));
+    if (status) status.textContent = 'Saved';
+    if (loud) toast('Saved');
     setTimeout(() => { if ($('saveStatus')) $('saveStatus').textContent = ''; }, 2500);
   } catch (e) {
     if (status) status.textContent = '';
@@ -442,7 +441,7 @@ async function saveEntry(loud = false) {
 
 async function removeEntry() {
   if (!state.entry?.id) return;
-  if (!confirm(t('entry.deleteConfirm'))) return;
+  if (!confirm('Delete the whole entry for this day?')) return;
   try {
     const paths = state.media.flatMap(m => [...partPaths(m.path, m.part_count || 1), m.poster_path]);
     if (state.entry.audio_path) paths.push(state.entry.audio_path);
@@ -450,7 +449,7 @@ async function removeEntry() {
     await db.deleteEntry(state.entry.id);
     entryDates.delete(state.date);
     await loadDate(state.date);
-    toast(t('entry.saved'));
+    toast('Saved');
   } catch (e) { toast(e.message); }
 }
 
@@ -462,7 +461,7 @@ async function toggleRecording() {
     const result = await state.recorder.stop();
     state.recorder = null;
     btn.classList.remove('is-rec');
-    $('recLabel').textContent = t('rec.for', { topic: topicLabel(state.topic, lang) });
+    $('recLabel').textContent = `Recording for: ${topicLabel(state.topic)}`;
     $('recLevel').style.width = '0%';
     if (result?.blob?.size) {
       state.audio = result;
@@ -478,11 +477,11 @@ async function toggleRecording() {
   try {
     await state.recorder.start();
     btn.classList.add('is-rec');
-    $('recLabel').textContent = t('rec.recording');
+    $('recLabel').textContent = 'Recording…';
     $('recTime').textContent = '0:00';
   } catch {
     state.recorder = null;
-    toast(t('rec.noMic'));
+    toast('Could not reach the microphone. Allow it in your browser.');
   }
 }
 
@@ -511,17 +510,17 @@ async function renderSavedAudio() {
 
 async function runTranscribe() {
   if (!state.audio) return;
-  if (!openAIKey()) return toast(t('rec.noKey'));
+  if (!openAIKey()) return toast('No OpenAI key yet — add it in Settings.');
   const btn = $('btnTranscribe');
   btn.disabled = true;
-  $('transcribeStatus').textContent = t('rec.working');
+  $('transcribeStatus').textContent = 'Listening and writing…';
   try {
     const text = await transcribe(state.audio.blob, state.audio.ext);
     if (text) appendToTopic(state.topic, text);
-    $('transcribeStatus').textContent = text ? t('rec.into', { topic: topicLabel(state.topic, lang) }) : '';
+    $('transcribeStatus').textContent = text ? `Text goes to “${topicLabel(state.topic)}”` : '';
     await saveEntry();
   } catch (e) {
-    $('transcribeStatus').textContent = e.code === 'NO_KEY' ? t('rec.noKey') : e.message;
+    $('transcribeStatus').textContent = e.code === 'NO_KEY' ? 'No OpenAI key yet — add it in Settings.' : e.message;
   } finally {
     btn.disabled = false;
   }
@@ -531,21 +530,21 @@ async function runTranscribe() {
 
 async function grabLocation() {
   const box = $('locView');
-  box.innerHTML = `<span class="chip">${t('entry.locating')}</span>`;
+  box.innerHTML = `<span class="chip">${'Finding your location…'}</span>`;
   try {
     // Show each better reading as it arrives, so a slow lock does not look stuck.
     const fix = await bestPosition({
       seconds: 6,
       goodEnough: 10,
       onFix: f => {
-        box.innerHTML = `<span class="chip">${t('entry.locking', { acc: accuracyText(f.accuracy) })}</span>`;
+        box.innerHTML = `<span class="chip">${`Getting a fix… ${accuracyText(f.accuracy)}`}</span>`;
       },
     });
     state.loc = { ...fix, place: await placeName(fix.lat, fix.lng) };
     dirty = true;
   } catch {
     state.loc = null;
-    toast(t('entry.locFail'));
+    toast('Could not get your location.');
   }
   renderLocation();
 }
@@ -598,7 +597,7 @@ function locationChips(loc, onClear) {
   coordChip.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(coordText(lat, lng));
-      toast(t('entry.copied'));
+      toast('Coordinates copied');
     } catch {
       toast(coordText(lat, lng));
     }
@@ -625,11 +624,11 @@ async function addMedia(files) {
 
   for (const file of files) {
     if (isVideo(file) && file.size > MAX_VIDEO_BYTES) {
-      toast(t('entry.wayTooBig', { size: humanSize(file.size) }));
+      toast(`Too big (${humanSize(file.size)}). Even in parts that is too much — keep it under 600 MB.`);
       continue;
     }
     if (isVideo(file) && file.size > PART_BYTES) {
-      toast(t('entry.bigVideo', { size: humanSize(file.size), n: partCount(file.size) }));
+      toast(`Large video (${humanSize(file.size)}) — stored in ${partCount(file.size)} parts and rejoined when you play it.`);
     }
     const preview = isVideo(file) ? '' : localPreview(file);
     const node = mediaNode({ preview, busy: true, video: isVideo(file) });
@@ -681,7 +680,7 @@ async function uploadVideo(file) {
   const parts = sliceParts(file);
   const paths = partPaths(path, parts.length);
   for (let i = 0; i < parts.length; i++) {
-    if (parts.length > 1) toast(t('entry.uploading', { i: i + 1, n: parts.length }));
+    if (parts.length > 1) toast(`Uploading… part ${i + 1} of ${parts.length}`);
     await db.uploadFile(paths[i], parts[i], type);
   }
 
@@ -690,7 +689,7 @@ async function uploadVideo(file) {
     posterPath = db.userPath(state.session.user.id, state.date, `plakkaat-${stamp('jpg')}`);
     await db.uploadFile(posterPath, meta.poster, 'image/jpeg');
   } else {
-    toast(t('entry.noPoster'));
+    toast('Could not get a preview frame from that video — it still works.');
   }
 
   return db.addPhotoRow({
@@ -794,14 +793,14 @@ export async function openViewer(m) {
 
   const note = document.createElement('p');
   note.className = 'viewer-note';
-  note.textContent = t('entry.joining', { i: 0, n: parts });
+  note.textContent = `Joining video… part ${0} of ${parts}`;
   body.appendChild(note);
   try {
     const urls = [];
     for (const p of partPaths(m.path, parts)) urls.push(await db.fileUrl(p));
     if (urls.some(u => !u)) throw new Error('missing part');
     const blob = await joinParts(urls, m.mime || 'video/mp4', (i, n) => {
-      note.textContent = t('entry.joining', { i, n });
+      note.textContent = `Joining video… part ${i} of ${n}`;
     });
     viewerUrl = URL.createObjectURL(blob);
     v.src = viewerUrl;
@@ -835,7 +834,7 @@ function mediaLocationPanel(m) {
       const none = document.createElement('span');
       none.className = 'chip';
       none.style.color = 'var(--label-tertiary)';
-      none.textContent = t('media.noLocation');
+      none.textContent = 'No location on this photo';
       row.appendChild(none);
     }
     wrap.appendChild(row);
@@ -848,24 +847,24 @@ function mediaLocationPanel(m) {
     setBtn.type = 'button';
     setBtn.className = 'chip';
     setBtn.style.color = 'var(--sys-blue)';
-    setBtn.textContent = m.lat != null ? t('media.relocate') : t('media.setLocation');
+    setBtn.textContent = m.lat != null ? '📍 Change location' : '📍 Use my location';
     setBtn.addEventListener('click', async () => {
       setBtn.disabled = true;
-      setBtn.textContent = t('entry.locating');
+      setBtn.textContent = 'Finding your location…';
       try {
         const fix = await bestPosition({
           seconds: 6,
           goodEnough: 10,
-          onFix: f => { setBtn.textContent = t('entry.locking', { acc: accuracyText(f.accuracy) }); },
+          onFix: f => { setBtn.textContent = `Getting a fix… ${accuracyText(f.accuracy)}`; },
         });
         const place = await placeName(fix.lat, fix.lng);
         await db.updatePhotoRow(m.id, { lat: fix.lat, lng: fix.lng, place, accuracy: fix.accuracy });
         Object.assign(m, { ...fix, place });
         renderMedia();
         draw();
-        toast(t('media.located'));
+        toast('Location saved');
       } catch {
-        toast(t('entry.locFail'));
+        toast('Could not get your location.');
         draw();
       }
     });
@@ -876,7 +875,7 @@ function mediaLocationPanel(m) {
       clearBtn.type = 'button';
       clearBtn.className = 'chip';
       clearBtn.style.color = 'var(--sys-red)';
-      clearBtn.textContent = t('media.clearLocation');
+      clearBtn.textContent = 'Remove location';
       clearBtn.addEventListener('click', async () => {
         try {
           await db.updatePhotoRow(m.id, { lat: null, lng: null, place: null, accuracy: null });
@@ -911,12 +910,12 @@ async function renderDiaryResults() {
   box.innerHTML = `
     <div class="filters">
       <select id="fTopic">
-        <option value="">${t('topic.all')}</option>
-        ${TOPICS.map(x => `<option value="${x.id}" ${state.filterTopic === x.id ? 'selected' : ''}>${escapeHtml(topicLabel(x.id, lang))}</option>`).join('')}
+        <option value="">${'All topics'}</option>
+        ${TOPICS.map(x => `<option value="${x.id}" ${state.filterTopic === x.id ? 'selected' : ''}>${escapeHtml(topicLabel(x.id))}</option>`).join('')}
       </select>
     </div>
     <div class="chip-row tag-cloud" id="tagCloud"></div>
-    <div class="group" id="resultList"><div class="empty-note">${t('pin.working')}</div></div>`;
+    <div class="group" id="resultList"><div class="empty-note">${'Working…'}</div></div>`;
 
   $('fTopic').addEventListener('change', e => { state.filterTopic = e.target.value; renderDiaryResults(); });
   renderTagCloud();
@@ -928,7 +927,7 @@ async function renderDiaryResults() {
 
   const list = $('resultList');
   if (!list) return;
-  if (!rows.length) { list.innerHTML = `<div class="empty-note">${t('list.nothing')}</div>`; return; }
+  if (!rows.length) { list.innerHTML = `<div class="empty-note">${'Nothing found.'}</div>`; return; }
 
   list.innerHTML = '';
   for (const row of rows) {
@@ -940,7 +939,7 @@ async function renderDiaryResults() {
     bodyEl.className = 'row-body';
     const title = document.createElement('div');
     title.className = 'row-title';
-    title.textContent = formatDate(row.entry_date);
+    title.textContent = fmtDateFull(row.entry_date);
     bodyEl.appendChild(title);
 
     if (row.place) {

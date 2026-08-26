@@ -9,7 +9,7 @@
  * It proves the app runs, not that it looks right. Only a real browser can
  * tell you that.
  */
-import { mkdtempSync, readdirSync, copyFileSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -130,15 +130,21 @@ process.on('unhandledRejection', e => problems.push(`unhandled rejection: ${e?.s
 process.on('uncaughtException', e => problems.push(`uncaught: ${e?.stack || e}`));
 
 try {
-  for (const file of readdirSync(JS_DIR).filter(f => f.endsWith('.js'))) {
-    copyFileSync(join(JS_DIR, file), join(work, file));
-  }
+  // Mirror the js/ tree, so relative imports between core/planner/diary hold.
+  const copyTree = (from, to) => {
+    mkdirSync(to, { recursive: true });
+    for (const e of readdirSync(from, { withFileTypes: true })) {
+      if (e.isDirectory()) copyTree(join(from, e.name), join(to, e.name));
+      else if (e.name.endsWith('.js')) copyFileSync(join(from, e.name), join(to, e.name));
+    }
+  };
+  copyTree(JS_DIR, work);
   writeFileSync(join(work, 'package.json'), '{ "type": "module" }');
   writeFileSync(join(work, 'supabase-stub.js'), SUPABASE_STUB);
 
-  const supaPath = join(work, 'supa.js');
+  const supaPath = join(work, 'core', 'supa.js');
   writeFileSync(supaPath, readFileSync(supaPath, 'utf8')
-    .replace(/from 'https:\/\/esm\.sh\/@supabase\/supabase-js@\d+'/, "from './supabase-stub.js'"));
+    .replace(/from 'https:\/\/esm\.sh\/@supabase\/supabase-js@\d+'/, "from '../supabase-stub.js'"));
 
   const url = f => pathToFileURL(join(work, f)).href;
 
@@ -153,8 +159,8 @@ try {
   // 2. does every screen draw?
   const screens = [];
   try {
-    const planner = await import(url('planner.js'));
-    const diary = await import(url('diary.js'));
+    const planner = await import(url('planner/planner.js'));
+    const diary = await import(url('diary/diary.js'));
     diary.setDiarySession({ user: { id: 'stub-user' } });
     screens.push(
       ['today', planner.renderToday],

@@ -25,7 +25,6 @@ const DEFAULTS = {
   model: 'gpt-4o-transcribe',
   sttLang: '',          // '' = auto-detect, so Afrikaans + English can mix
   vocab: '',            // names/places you say often - fed to the model as a hint
-  lang: 'af',           // UI language
   username: '',         // remembered on this device, so you only type the PIN
   slug: '',             // permanent account id the credentials derive from
 };

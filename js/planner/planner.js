@@ -2,11 +2,10 @@
 //
 // This is the original app's logic, kept as close to the source as possible -
 // same data shape, same sort rules, same swipe gestures, same sheets. What
-// changed: the strings go through i18n, and `tasks`/`saveTasks` are now the
+// changed: `tasks`/`saveTasks` are now the
 // Supabase-backed store in tasks.js instead of the `window.storage` object,
 // which does not exist outside the environment it was written in.
 
-import { t, lang } from './i18n.js';
 import { items, saveItems } from './tasks.js';
 import {
   $, escapeHtml, uid, Spring, runSpring, project, rubberband,
@@ -16,8 +15,8 @@ import {
   dateStripWrapHtml, wireDateStrip, getDateStripValue,
   timePickerContainerHtml, wireTimePicker, getTimePickerValue,
   sheetEl, openSheet, closeSheet, toast, refresh,
-} from './ui.js';
-import { diaryDatesInRange, openDiaryDate } from './diary.js';
+} from '../core/ui.js';
+import { diaryDatesInRange, openDiaryDate } from '../diary/diary.js';
 
 export const CONTEXTS = ['Floor', 'Admin', 'App', 'Home'];
 export const CONTEXT_COLORS = { Floor: 'var(--sys-orange)', Admin: 'var(--sys-gray)', App: 'var(--sys-teal)', Home: 'var(--sys-purple)' };
@@ -54,20 +53,20 @@ export function goalsSoonCount() {
 }
 export function monthCursorLabel() { return fmtMonthYear(monthCursor || monthStart(TODAY())); }
 
-function save() { saveItems({ onError: () => setStatus(t('planner.saveFail')) }); }
+function save() { saveItems({ onError: () => setStatus('Could not save just now — will retry on the next change.') }); }
 function setStatus(msg) { const el = $('statusLine'); if (el) el.textContent = msg; }
 
 function recurringLabel(t2) {
-  if (t2.recurring === 'daily') return t('rep.daily');
-  if (t2.recurring === 'weekdays') return t('rep.weekdays');
-  if (t2.recurring === 'weekly') return t2.date ? t('rep.everyDow', { dow: dowAbbr(t2.date) }) : t('rep.weekly');
+  if (t2.recurring === 'daily') return 'daily';
+  if (t2.recurring === 'weekdays') return 'weekdays';
+  if (t2.recurring === 'weekly') return t2.date ? `every ${dowAbbr(t2.date)}` : 'weekly';
   return '';
 }
 
 function contextFilterHtml() {
   const chips = ['All', ...CONTEXTS];
   return `<div class="ctxfilter-row">${chips.map(c =>
-    `<button class="ctxfilter-btn ${activeContext === c ? 'active' : ''}" data-ctxf="${c}" type="button">${c === 'All' ? t('ctx.all') : c}</button>`
+    `<button class="ctxfilter-btn ${activeContext === c ? 'active' : ''}" data-ctxf="${c}" type="button">${c === 'All' ? 'All' : c}</button>`
   ).join('')}</div>`;
 }
 function wireContextFilter(el) {
@@ -100,23 +99,23 @@ export function renderToday() {
 
   if (goalsSoon.length) {
     html += `<div class="goal-banner">
-      <div class="goal-banner-title">${t('goal.comingUp')}</div>
+      <div class="goal-banner-title">${'Goals coming up'}</div>
       ${goalsSoon.map(g => {
         const d = daysBetween(today, g.deadline);
-        const label = d < 0 ? t('goal.overdue', { n: -d }) : d === 0 ? t('goal.dueToday') : t('goal.daysLeft', { n: d });
+        const label = d < 0 ? `${-d}d overdue` : d === 0 ? 'Due today' : `${d}d left`;
         return `<div class="goal-banner-item" data-goalbanner="${g.id}"><span class="gname">${escapeHtml(g.title)}</span><span class="gdays ${d < 0 ? 'over' : ''}">${label}</span></div>`;
       }).join('')}
     </div>`;
   }
 
   if (ongoing.length) {
-    html += `<div class="section-title">${t('sec.ongoing')}</div><div class="group">`;
+    html += `<div class="section-title">${'Ongoing'}</div><div class="group">`;
     html += ongoing.map(ongoingRowHtml).join('');
     html += `</div>`;
   }
 
-  html += `<div class="section-title">${t('sec.tasks')} &nbsp;&middot;&nbsp; ${doneCount}/${todays.length}</div><div class="group">`;
-  html += todays.length ? todays.map(x => taskRowHtml(x, today)).join('') : `<div class="empty-note">${t('empty.today')}</div>`;
+  html += `<div class="section-title">${'Tasks'} &nbsp;&middot;&nbsp; ${doneCount}/${todays.length}</div><div class="group">`;
+  html += todays.length ? todays.map(x => taskRowHtml(x, today)).join('') : `<div class="empty-note">${'Nothing on your plate today. Tap + to add something.'}</div>`;
   html += `</div><div class="status-line" id="statusLine"></div>`;
 
   el.innerHTML = html;
@@ -131,15 +130,15 @@ function ongoingRowHtml(x) {
   const lastTouch = x.lastTouchedDate || x.startedDate;
   const staleDays = daysBetween(lastTouch, today);
   const startedDays = daysBetween(x.startedDate, today);
-  const started = startedDays === 0 ? t('time.today') : t('time.daysAgo', { n: startedDays });
-  const touched = staleDays === 0 ? t('time.today') : t('time.daysAgo', { n: staleDays });
+  const started = startedDays === 0 ? 'today' : `${startedDays}d ago`;
+  const touched = staleDays === 0 ? 'today' : `${staleDays}d ago`;
   return `<div class="ongoing-row">
       <div class="ongoing-top"><div class="ongoing-title" data-ongoingbody="${x.id}">${escapeHtml(x.title)}</div></div>
       ${x.notes ? `<div class="row-notes">${escapeHtml(x.notes)}</div>` : ''}
-      <div class="ongoing-meta ${staleDays >= 2 ? 'stale' : ''}">${t('ongoing.meta', { started, touched })}${x.context ? ` &middot; ${escapeHtml(x.context)}` : ''}</div>
+      <div class="ongoing-meta ${staleDays >= 2 ? 'stale' : ''}">${`Started ${started} · last touched ${touched}`}${x.context ? ` &middot; ${escapeHtml(x.context)}` : ''}</div>
       <div class="ongoing-actions">
-        <button class="ongoing-btn log" data-log="${x.id}" type="button">${ICON_BOLT} ${t('ongoing.log')}</button>
-        <button class="ongoing-btn finish" data-finish="${x.id}" type="button">${ICON_CHECK} ${t('ongoing.finish')}</button>
+        <button class="ongoing-btn log" data-log="${x.id}" type="button">${ICON_BOLT} ${'Log today'}</button>
+        <button class="ongoing-btn finish" data-finish="${x.id}" type="button">${ICON_CHECK} ${'Finish'}</button>
       </div>
     </div>`;
 }
@@ -164,20 +163,20 @@ function taskRowHtml(x, dateStr) {
   if (x.time) meta.push(`<span class="meta-chip">${fmtTime(x.time)}</span>`);
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
   if (x.context) meta.push(`<span class="meta-chip">${escapeHtml(x.context)}</span>`);
-  if (x.goalId) meta.push(`<span class="meta-chip goal">${t('chip.goal')}</span>`);
+  if (x.goalId) meta.push(`<span class="meta-chip goal">${'goal'}</span>`);
   return `<div class="swipe-slot" data-taskslot="${x.id}">
       <div class="swipe-bg">
-        <span class="swipe-side left">${ICON_CHECK} ${t('swipe.complete')}</span>
-        <span class="swipe-side right">${t('swipe.delete')} ${ICON_TRASH}</span>
+        <span class="swipe-side left">${ICON_CHECK} ${'Complete'}</span>
+        <span class="swipe-side right">${'Delete'} ${ICON_TRASH}</span>
       </div>
       <div class="row">
-        <button class="check-circle ${done ? 'done' : ''} ${x.flagged ? 'flag-color' : ''}" style="--dot-color:var(--sys-orange)" data-check="${x.id}" aria-label="${t('aria.toggleDone')}">${done ? ICON_CHECK : ''}</button>
+        <button class="check-circle ${done ? 'done' : ''} ${x.flagged ? 'flag-color' : ''}" style="--dot-color:var(--sys-orange)" data-check="${x.id}" aria-label="${'Toggle done'}">${done ? ICON_CHECK : ''}</button>
         <div class="row-body" data-body="${x.id}">
           <div class="row-title ${done ? 'done' : ''}">${x.flagged ? '&#128681; ' : ''}${escapeHtml(x.title)}</div>
           ${x.notes ? `<div class="row-notes">${escapeHtml(x.notes)}</div>` : ''}
           ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
         </div>
-        <button class="row-del" data-del="${x.id}" aria-label="${t('aria.delete')}">${ICON_TRASH}</button>
+        <button class="row-del" data-del="${x.id}" aria-label="${'Delete'}">${ICON_TRASH}</button>
       </div>
     </div>`;
 }
@@ -208,7 +207,7 @@ function toggleCompleteOn(id, dateStr) {
 function requestDelete(id, btn) {
   if (pendingDelete !== id) {
     pendingDelete = id;
-    if (btn) { btn.classList.add('confirm'); btn.title = t('confirm.tapAgain'); }
+    if (btn) { btn.classList.add('confirm'); btn.title = 'Tap again to delete'; }
     setTimeout(() => { if (pendingDelete === id) { pendingDelete = null; refresh(); } }, 3000);
     return;
   }
@@ -289,7 +288,7 @@ export function renderWeek() {
   const el = $('screenContent');
   let html = `<div class="search-row">
     <span class="search-icon">${ICON_CHEVRON}</span>
-    <input type="text" id="weekSearch" data-i18n-ph="search.ph" placeholder="${t('search.ph')}" value="${escapeHtml(searchQuery)}">
+    <input type="text" id="weekSearch" data-i18n-ph="search.ph" placeholder="${'Search tasks, projects, goals…'}" value="${escapeHtml(searchQuery)}">
     ${searchQuery ? `<button class="search-clear" id="searchClear" type="button">&times;</button>` : ''}
   </div>`;
 
@@ -327,24 +326,24 @@ function renderSearchResultsHtml(query) {
     || (x.notes || '').toLowerCase().includes(q));
   results.sort((a, b) => (b.order || 0) - (a.order || 0));
 
-  let html = `<div class="section-title">${t('search.results', { n: results.length, q: escapeHtml(query) })}</div><div class="group">`;
-  html += results.length ? results.map(searchRowHtml).join('') : `<div class="empty-note">${t('search.none')}</div>`;
+  let html = `<div class="section-title">${`${results.length} results for “${escapeHtml(query)}”`}</div><div class="group">`;
+  html += results.length ? results.map(searchRowHtml).join('') : `<div class="empty-note">${'No matches.'}</div>`;
   html += `</div>`;
   return html;
 }
 function searchRowHtml(x) {
   let kindLabel = '', meta = '';
   if (x.kind === 'task') {
-    kindLabel = t('kind.task');
+    kindLabel = 'Task';
     meta = x.recurring !== 'none'
       ? recurringLabel(x) + (x.time ? ' · ' + fmtTime(x.time) : '')
-      : (x.date ? (x.time ? `${fmtMonthDay(x.date)} · ${fmtTime(x.time)}` : fmtMonthDay(x.date)) : t('meta.noDate'));
+      : (x.date ? (x.time ? `${fmtMonthDay(x.date)} · ${fmtTime(x.time)}` : fmtMonthDay(x.date)) : 'No date');
   } else if (x.kind === 'ongoing') {
-    kindLabel = t('kind.ongoing');
-    meta = x.finished ? t('meta.finished') : t('meta.started', { d: fmtMonthDay(x.startedDate) });
+    kindLabel = 'Ongoing';
+    meta = x.finished ? 'Finished' : `Started ${fmtMonthDay(x.startedDate)}`;
   } else {
-    kindLabel = t('kind.goal');
-    meta = x.finished ? t('meta.done') : t('meta.due', { d: fmtMonthDay(x.deadline) });
+    kindLabel = 'Goal';
+    meta = x.finished ? 'Done' : `Due ${fmtMonthDay(x.deadline)}`;
   }
   return `<div class="row" data-searchresult="${x.id}">
       <div class="row-body">
@@ -375,7 +374,7 @@ function renderMonthGridHtml() {
 
   html += `<div class="month-legend">
     ${CONTEXTS.map(c => `<span class="mleg-item"><span class="mleg-dot" style="background:${CONTEXT_COLORS[c]}"></span>${c}</span>`).join('')}
-    <span class="mleg-item"><span class="mc-diary"></span>${t('legend.diary')}</span>
+    <span class="mleg-item"><span class="mc-diary"></span>${'Diary'}</span>
   </div>`;
 
   html += `<div class="month-dow-row">${dowLabels('short').map(d => `<div class="month-dow">${d}</div>`).join('')}</div>`;
@@ -420,12 +419,12 @@ function openDayDetail(dateStr) {
     <div class="sheet-handle"></div>
     <div class="sheet-title">${fmtDateFull(dateStr)}</div>
     <div class="group" style="margin-bottom:14px;">
-      ${dayItems.length ? dayItems.map(x => dayRowHtml(x, dateStr)).join('') : `<div class="empty-note">${t('empty.day')}</div>`}
+      ${dayItems.length ? dayItems.map(x => dayRowHtml(x, dateStr)).join('') : `<div class="empty-note">${'Nothing planned.'}</div>`}
     </div>
     <button class="sheet-move-btn" id="dayDiaryBtn" type="button" style="width:100%;margin-bottom:10px;">
-      ${hasDiary ? t('day.openDiary') : t('day.writeDiary')}
+      ${hasDiary ? '✎ Open this day in the diary' : '✎ Write a diary entry for this day'}
     </button>
-    <div class="sheet-actions"><button class="sheet-cancel" id="dayClose" type="button">${t('btn.close')}</button></div>`;
+    <div class="sheet-actions"><button class="sheet-cancel" id="dayClose" type="button">${'Close'}</button></div>`;
 
   $('dayClose').addEventListener('click', closeSheet);
   $('dayDiaryBtn').addEventListener('click', () => { closeSheet(); openDiaryDate(dateStr); });
@@ -450,12 +449,12 @@ function dayRowHtml(x, dateStr) {
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
   if (x.context) meta.push(`<span class="meta-chip">${escapeHtml(x.context)}</span>`);
   return `<div class="row week-task-row">
-      <button class="check-circle ${done ? 'done' : ''}" data-check="${x.id}" aria-label="${t('aria.toggleDone')}">${done ? ICON_CHECK : ''}</button>
+      <button class="check-circle ${done ? 'done' : ''}" data-check="${x.id}" aria-label="${'Toggle done'}">${done ? ICON_CHECK : ''}</button>
       <div class="row-body" data-body="${x.id}">
         <div class="row-title ${done ? 'done' : ''}">${x.flagged ? '&#128681; ' : ''}${escapeHtml(x.title)}</div>
         ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
       </div>
-      <button class="row-del" data-del="${x.id}" aria-label="${t('aria.delete')}">${ICON_TRASH}</button>
+      <button class="row-del" data-del="${x.id}" aria-label="${'Delete'}">${ICON_TRASH}</button>
     </div>`;
 }
 
@@ -466,12 +465,12 @@ export function renderGoals() {
   const active = items.filter(x => x.kind === 'goal' && !x.finished).sort((a, b) => a.deadline.localeCompare(b.deadline));
   const done = items.filter(x => x.kind === 'goal' && x.finished).sort((a, b) => (b.finishedDate || '').localeCompare(a.finishedDate || ''));
 
-  let html = `<div class="section-title">${t('sec.active')}</div><div class="group">`;
-  html += active.length ? active.map(goalCardHtml).join('') : `<div class="empty-note">${t('empty.goals')}</div>`;
+  let html = `<div class="section-title">${'Active'}</div><div class="group">`;
+  html += active.length ? active.map(goalCardHtml).join('') : `<div class="empty-note">${'No goals yet — tap + and choose “Goal”.'}</div>`;
   html += `</div>`;
 
   if (done.length) {
-    html += `<div class="section-title">${t('sec.completed')}</div><div class="group">${done.map(goalCardHtml).join('')}</div>`;
+    html += `<div class="section-title">${'Completed'}</div><div class="group">${done.map(goalCardHtml).join('')}</div>`;
   }
   html += `<div class="status-line" id="statusLine"></div>`;
   el.innerHTML = html;
@@ -512,20 +511,20 @@ export function renderGoals() {
 function goalCardHtml(g) {
   const d = daysBetween(TODAY(), g.deadline);
   let countdown;
-  if (g.finished) countdown = t('meta.done');
-  else if (d < 0) countdown = t('goal.overdue', { n: -d });
-  else if (d === 0) countdown = t('goal.dueToday');
-  else countdown = t('goal.daysLeft', { n: d });
+  if (g.finished) countdown = 'Done';
+  else if (d < 0) countdown = `${-d}d overdue`;
+  else if (d === 0) countdown = 'Due today';
+  else countdown = `${d}d left`;
   const cdClass = g.finished ? 'done' : d < 0 ? 'over' : '';
   const linked = items.filter(x => x.kind === 'task' && x.goalId === g.id);
   const linkedDone = linked.filter(x => x.completed).length;
 
   return `<div class="goal-card">
       <div class="goal-top">
-        <button class="check-circle" style="width:22px;height:22px;" data-goalcheck="${g.id}" aria-label="${t('aria.goalDone')}">${g.finished ? ICON_CHECK : ''}</button>
+        <button class="check-circle" style="width:22px;height:22px;" data-goalcheck="${g.id}" aria-label="${'Mark goal done'}">${g.finished ? ICON_CHECK : ''}</button>
         <div style="flex:1;min-width:0;">
           <div class="goal-title ${g.finished ? 'done' : ''}" data-goaltitle="${g.id}">${escapeHtml(g.title)}</div>
-          <div class="goal-sub">${t('meta.due', { d: fmtMonthDay(g.deadline) })}${linked.length ? ` &middot; ${t('goal.tasksDone', { done: linkedDone, total: linked.length })}` : ''}</div>
+          <div class="goal-sub">${`Due ${fmtMonthDay(g.deadline)}`}${linked.length ? ` &middot; ${`${linkedDone}/${linked.length} tasks done`}` : ''}</div>
           ${g.notes ? `<div class="row-notes" style="white-space:normal;">${escapeHtml(g.notes)}</div>` : ''}
         </div>
         <div class="goal-countdown ${cdClass}">${countdown}</div>
@@ -536,8 +535,8 @@ function goalCardHtml(g) {
           <div class="row-title" data-body="${x.id}">${escapeHtml(x.title)}</div>
         </div>`).join('')}</div>` : ''}
       ${goalAddOpenId === g.id
-        ? `<input type="text" class="tag-input" data-goaltaskinput="${g.id}" placeholder="${t('goal.taskPh')}">`
-        : `<button class="goal-add-task" data-goaladdtask="${g.id}" type="button">${t('goal.addTask')}</button>`}
+        ? `<input type="text" class="tag-input" data-goaltaskinput="${g.id}" placeholder="${'Task title, then Enter'}">`
+        : `<button class="goal-add-task" data-goaladdtask="${g.id}" type="button">${'+ Add a task toward this'}</button>`}
     </div>`;
 }
 
@@ -548,8 +547,8 @@ export function renderInbox() {
   const list = items.filter(x => isInboxTask(x) && matchesContext(x)).sort((a, b) => (b.order || 0) - (a.order || 0));
 
   let html = contextFilterHtml();
-  html += `<div class="section-title">${t('sec.unscheduled')}</div><div class="group">`;
-  html += list.length ? list.map(inboxRowHtml).join('') : `<div class="empty-note">${t('empty.inbox')}</div>`;
+  html += `<div class="section-title">${'Unscheduled'}</div><div class="group">`;
+  html += list.length ? list.map(inboxRowHtml).join('') : `<div class="empty-note">${'Nothing waiting — capture anything here without deciding when.'}</div>`;
   html += `</div><div class="status-line" id="statusLine"></div>`;
   el.innerHTML = html;
 
@@ -571,9 +570,9 @@ function inboxRowHtml(x) {
       <div class="row-body" data-body="${x.id}">
         <div class="row-title">${escapeHtml(x.title)}${x.context ? ` <span class="meta-chip">${escapeHtml(x.context)}</span>` : ''}</div>
       </div>
-      <button class="link" data-movetoday="${x.id}" type="button">${t('btn.today')}</button>
-      <button class="link" data-movetom="${x.id}" type="button">${t('btn.tomorrow')}</button>
-      <button class="row-del" data-del="${x.id}" aria-label="${t('aria.delete')}">${ICON_TRASH}</button>
+      <button class="link" data-movetoday="${x.id}" type="button">${'Today'}</button>
+      <button class="link" data-movetom="${x.id}" type="button">${'Tomorrow'}</button>
+      <button class="row-del" data-del="${x.id}" aria-label="${'Delete'}">${ICON_TRASH}</button>
     </div>`;
 }
 
@@ -593,28 +592,28 @@ function newTask(over = {}) {
 let capArea = null;
 
 const CAP_AREAS = () => [
-  { id: 'today', label: t('cap.today') },
-  { id: 'week', label: t('cap.week') },
-  { id: 'ongoing', label: t('cap.ongoing') },
-  { id: 'goal', label: t('cap.goal') },
-  { id: 'inbox', label: t('cap.inbox') },
-  { id: 'diary', label: t('cap.diary') },
+  { id: 'today', label: '☀️ Today' },
+  { id: 'week', label: '📅 This week' },
+  { id: 'ongoing', label: '⚡ Ongoing' },
+  { id: 'goal', label: '🚩 Goal' },
+  { id: 'inbox', label: '📥 Inbox' },
+  { id: 'diary', label: '📔 Diary' },
 ];
 
 export function openCaptureSheet(preferred) {
   capArea = preferred || null;
   sheetEl().innerHTML = `
     <div class="sheet-handle"></div>
-    <div class="sheet-title">${t('cap.title')}</div>
-    <input type="text" id="capTitle" placeholder="${t('cap.ph')}">
-    <div class="cap-area-label">${t('cap.where')}</div>
+    <div class="sheet-title">${'New item'}</div>
+    <input type="text" id="capTitle" placeholder="${'What needs doing?'}">
+    <div class="cap-area-label">${'Where does this go?'}</div>
     <div class="cap-area-grid">
       ${CAP_AREAS().map(a => `<button class="cap-area-btn ${capArea === a.id ? 'active' : ''}" data-area="${a.id}" type="button">${a.label}</button>`).join('')}
     </div>
     <div id="capExtra">${capExtraHtml()}</div>
     <div class="sheet-actions">
-      <button class="sheet-cancel" id="capCancel" type="button">${t('btn.cancel')}</button>
-      <button class="sheet-save" id="capSave" type="button">${t('btn.add')}</button>
+      <button class="sheet-cancel" id="capCancel" type="button">${'Cancel'}</button>
+      <button class="sheet-save" id="capSave" type="button">${'Add'}</button>
     </div>`;
 
   $('capCancel').addEventListener('click', closeSheet);
@@ -633,25 +632,25 @@ export function openCaptureSheet(preferred) {
 }
 
 function capContextPillHtml() {
-  return `<label class="qo-pill">${t('cap.area')}<select id="capContext">
-    <option value="">${t('cap.noArea')}</option>
+  return `<label class="qo-pill">${'🏷️'}<select id="capContext">
+    <option value="">${'No area'}</option>
     ${CONTEXTS.map(c => `<option value="${c}">${c}</option>`).join('')}
   </select></label>`;
 }
 function capRepeatPillHtml() {
-  return `<label class="qo-pill">${t('cap.repeat')}<select id="capRepeat">
-    <option value="none">${t('rep.once')}</option>
-    <option value="daily">${t('rep.daily')}</option>
-    <option value="weekly">${t('rep.weekly')}</option>
-    <option value="weekdays">${t('rep.weekdays')}</option>
+  return `<label class="qo-pill">${'🔁'}<select id="capRepeat">
+    <option value="none">${'Once'}</option>
+    <option value="daily">${'daily'}</option>
+    <option value="weekly">${'weekly'}</option>
+    <option value="weekdays">${'weekdays'}</option>
   </select></label>`;
 }
 function capExtraHtml() {
   const commons = `<div class="quickadd-options" style="padding:0;margin-top:10px;">
-      ${timePickerContainerHtml('capTime', '', t('cap.addTime'))}
+      ${timePickerContainerHtml('capTime', '', '🕐 Time')}
       ${capRepeatPillHtml()}
       ${capContextPillHtml()}
-      <button class="qo-flag" id="capFlag" type="button" data-on="0">${t('cap.flag')}</button>
+      <button class="qo-flag" id="capFlag" type="button" data-on="0">${'🚩 Flag'}</button>
     </div>`;
 
   if (capArea === 'today') return `<div class="cap-extra-group">${commons}</div>`;
@@ -660,21 +659,21 @@ function capExtraHtml() {
   if (capArea === 'ongoing') {
     return `<div class="cap-extra-group">
       <div class="quickadd-options" style="padding:0;margin-top:10px;">${capContextPillHtml()}</div>
-      <div class="cap-extra-note">${t('cap.ongoingNote')}</div></div>`;
+      <div class="cap-extra-note">${'Starts today. Log progress from the Today screen until you mark it finished.'}</div></div>`;
   }
   if (capArea === 'inbox') {
     return `<div class="cap-extra-group">
       <div class="quickadd-options" style="padding:0;margin-top:10px;">${capContextPillHtml()}</div>
-      <div class="cap-extra-note">${t('cap.inboxNote')}</div></div>`;
+      <div class="cap-extra-note">${'No date — sits in the Inbox until you schedule it.'}</div></div>`;
   }
   if (capArea === 'diary') {
     return `<div class="cap-extra-group">
-      <div class="cap-extra-note">${t('cap.diaryNote')}</div></div>`;
+      <div class="cap-extra-note">${'Opens today’s diary and drops this text under the topic you pick.'}</div></div>`;
   }
-  return `<div class="cap-extra-note">${t('cap.pickFirst')}</div>`;
+  return `<div class="cap-extra-note">${'Pick where this goes first.'}</div>`;
 }
 function wireCapExtra() {
-  wireTimePicker('capTime', t('cap.addTime'));
+  wireTimePicker('capTime', '🕐 Time');
   const flag = $('capFlag');
   if (flag) flag.addEventListener('click', () => {
     const on = flag.dataset.on !== '1';
@@ -729,63 +728,63 @@ export function openPlannerEditor(id) {
 }
 
 function notesFieldHtml(x) {
-  return `<textarea id="editNotes" class="sheet-notes" placeholder="${t('edit.notesPh')}" maxlength="2000">${escapeHtml(x.notes || '')}</textarea>`;
+  return `<textarea id="editNotes" class="sheet-notes" placeholder="${'More detail or explanation…'}" maxlength="2000">${escapeHtml(x.notes || '')}</textarea>`;
 }
 
 function editorHtml(x) {
   const actions = `<div class="sheet-actions">
-      <button class="sheet-cancel" id="sheetCancel" type="button">${t('btn.cancel')}</button>
-      <button class="sheet-delete" id="sheetDelete" type="button">${t('btn.delete')}</button>
-      <button class="sheet-save" id="sheetSave" type="button">${t('btn.save')}</button>
+      <button class="sheet-cancel" id="sheetCancel" type="button">${'Cancel'}</button>
+      <button class="sheet-delete" id="sheetDelete" type="button">${'Delete'}</button>
+      <button class="sheet-save" id="sheetSave" type="button">${'Save'}</button>
     </div>`;
 
   if (x.kind === 'goal') {
     return `<div class="sheet-handle"></div>
-      <div class="sheet-title">${t('edit.goal')}</div>
+      <div class="sheet-title">${'Edit goal'}</div>
       <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
       ${notesFieldHtml(x)}
-      <div class="fname" style="margin-bottom:8px;">${t('edit.deadline')}</div>
+      <div class="fname" style="margin-bottom:8px;">${'Deadline'}</div>
       ${dateStripWrapHtml('editDeadline')}
       ${actions}`;
   }
   if (x.kind === 'ongoing') {
     return `<div class="sheet-handle"></div>
-      <div class="sheet-title">${t('edit.ongoing')}</div>
+      <div class="sheet-title">${'Edit project'}</div>
       <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
       ${notesFieldHtml(x)}
       <div class="field-group">
-        <div class="field-row"><span class="fname">${t('edit.started')}</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.startedDate)}</span></div>
-        <div class="field-row"><span class="fname">${t('edit.touched')}</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.lastTouchedDate || x.startedDate)}</span></div>
+        <div class="field-row"><span class="fname">${'Started'}</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.startedDate)}</span></div>
+        <div class="field-row"><span class="fname">${'Last touched'}</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.lastTouchedDate || x.startedDate)}</span></div>
       </div>
       ${actions}`;
   }
   return `<div class="sheet-handle"></div>
-    <div class="sheet-title">${t('edit.task')}</div>
+    <div class="sheet-title">${'Edit task'}</div>
     <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
     ${notesFieldHtml(x)}
     <div class="sheet-move-row">
-      <button class="sheet-move-btn" id="moveTodayBtn" type="button">${t('btn.today')}</button>
-      <button class="sheet-move-btn" id="moveTomBtn" type="button">${t('btn.tomorrow')}</button>
-      <button class="sheet-move-btn" id="moveNoneBtn" type="button">${t('btn.noDate')}</button>
+      <button class="sheet-move-btn" id="moveTodayBtn" type="button">${'Today'}</button>
+      <button class="sheet-move-btn" id="moveTomBtn" type="button">${'Tomorrow'}</button>
+      <button class="sheet-move-btn" id="moveNoneBtn" type="button">${'No date'}</button>
     </div>
     <div class="field-group">
-      <div class="field-row"><span class="fname">${t('edit.date')}</span><input type="date" id="editDate" value="${x.date || ''}"></div>
-      <div class="field-row"><span class="fname">${t('edit.time')}</span>${timePickerContainerHtml('editTime', x.time || '', t('cap.addTime'))}</div>
-      <div class="field-row"><span class="fname">${t('edit.repeats')}</span>
+      <div class="field-row"><span class="fname">${'Date'}</span><input type="date" id="editDate" value="${x.date || ''}"></div>
+      <div class="field-row"><span class="fname">${'Time'}</span>${timePickerContainerHtml('editTime', x.time || '', '🕐 Time')}</div>
+      <div class="field-row"><span class="fname">${'Repeats'}</span>
         <select id="editRecur">
-          <option value="none" ${x.recurring === 'none' ? 'selected' : ''}>${t('rep.once')}</option>
-          <option value="daily" ${x.recurring === 'daily' ? 'selected' : ''}>${t('rep.daily')}</option>
-          <option value="weekly" ${x.recurring === 'weekly' ? 'selected' : ''}>${t('rep.weekly')}</option>
-          <option value="weekdays" ${x.recurring === 'weekdays' ? 'selected' : ''}>${t('rep.weekdays')}</option>
+          <option value="none" ${x.recurring === 'none' ? 'selected' : ''}>${'Once'}</option>
+          <option value="daily" ${x.recurring === 'daily' ? 'selected' : ''}>${'daily'}</option>
+          <option value="weekly" ${x.recurring === 'weekly' ? 'selected' : ''}>${'weekly'}</option>
+          <option value="weekdays" ${x.recurring === 'weekdays' ? 'selected' : ''}>${'weekdays'}</option>
         </select>
       </div>
-      <div class="field-row"><span class="fname">${t('edit.context')}</span>
+      <div class="field-row"><span class="fname">${'Area'}</span>
         <select id="editContext">
           <option value="" ${!x.context ? 'selected' : ''}>&mdash;</option>
           ${CONTEXTS.map(c => `<option value="${c}" ${x.context === c ? 'selected' : ''}>${c}</option>`).join('')}
         </select>
       </div>
-      <div class="toggle-row"><span class="fname">${t('edit.flagged')}</span>
+      <div class="toggle-row"><span class="fname">${'Flagged'}</span>
         <button class="ios-switch ${x.flagged ? 'on' : ''}" id="editFlagToggle" data-on="${x.flagged ? '1' : '0'}" type="button"><span class="thumb"></span></button>
       </div>
     </div>
@@ -802,7 +801,7 @@ function wireEditor(x) {
     $('moveTodayBtn').addEventListener('click', () => { $('editDate').value = TODAY(); });
     $('moveTomBtn').addEventListener('click', () => { $('editDate').value = addDays(TODAY(), 1); });
     $('moveNoneBtn').addEventListener('click', () => { $('editDate').value = ''; });
-    wireTimePicker('editTime', t('cap.addTime'));
+    wireTimePicker('editTime', '🕐 Time');
     const flag = $('editFlagToggle');
     flag.addEventListener('click', () => {
       const on = flag.dataset.on !== '1';

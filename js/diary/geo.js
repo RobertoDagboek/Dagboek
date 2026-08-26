@@ -1,4 +1,3 @@
-import { lang } from './i18n.js';
 
 /**
  * Best fix we can get in a few seconds.
@@ -78,7 +77,7 @@ export function currentPosition() {
  */
 export async function placeName(lat, lng) {
   const url = 'https://api.bigdatacloud.net/data/reverse-geocode-client'
-    + `?latitude=${lat}&longitude=${lng}&localityLanguage=${lang === 'af' ? 'af' : 'en'}`;
+    + `?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(String(res.status));

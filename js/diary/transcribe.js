@@ -1,4 +1,4 @@
-import { settings, openAIKey } from './config.js';
+import { settings, openAIKey } from '../core/config.js';
 
 const ENDPOINT = 'https://api.openai.com/v1/audio/transcriptions';
 const MAX_BYTES = 25 * 1024 * 1024; // OpenAI audio upload limit

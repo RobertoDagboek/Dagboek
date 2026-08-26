@@ -2,7 +2,6 @@
 // engine, the icon set, the date strip, the time picker and the bottom sheet.
 // Nothing here knows about tasks or diary entries.
 
-import { lang } from './i18n.js';
 
 export const $ = id => document.getElementById(id);
 
@@ -80,7 +79,8 @@ export function monthStart(s) { const d = parseDateStr(s); return todayStr(new D
 export function addMonths(s, n) { const d = parseDateStr(s); return todayStr(new Date(d.getFullYear(), d.getMonth() + n, 1)); }
 export function daysBetween(a, b) { return Math.round((parseDateStr(b) - parseDateStr(a)) / 86400000); }
 
-const locale = () => (lang === 'en' ? 'en-ZA' : 'af-ZA');
+// South African English: day-before-month dates, local weekday names.
+const locale = () => 'en-ZA';
 export function fmtDateFull(s) { return parseDateStr(s).toLocaleDateString(locale(), { weekday: 'long', month: 'long', day: 'numeric' }); }
 export function fmtDateShort(s) { return parseDateStr(s).toLocaleDateString(locale(), { weekday: 'short', month: 'short', day: 'numeric' }); }
 export function fmtMonthDay(s) { return parseDateStr(s).toLocaleDateString(locale(), { month: 'short', day: 'numeric' }); }

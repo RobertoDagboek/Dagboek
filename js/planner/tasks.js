@@ -9,7 +9,7 @@
 // Saving diffs against the last known state, so editing one task sends one row
 // rather than the whole list.
 
-import { supa } from './supa.js';
+import { supa } from '../core/supa.js';
 
 const TABLE = 'planner_items';
 

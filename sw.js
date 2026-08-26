@@ -2,7 +2,7 @@
 // online, and the last-known copy when you are not. Cross-origin calls
 // (Supabase, OpenAI, the CDN) are never touched.
 
-const CACHE = 'dagboek-v8';
+const CACHE = 'dagboek-v9';
 const SHELL = [
   './',
   './index.html',
@@ -13,22 +13,21 @@ const SHELL = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './js/app.js',
-  './js/ui.js',
-  './js/planner.js',
-  './js/diary.js',
-  './js/tasks.js',
-  './js/config.js',
-  './js/crypto.js',
-  './js/i18n.js',
-  './js/supa.js',
-  './js/recorder.js',
-  './js/transcribe.js',
-  './js/geo.js',
-  './js/exif.js',
-  './js/photos.js',
-  './js/video.js',
-  './js/topics.js',
-  './js/quotes.js',
+  './js/core/ui.js',
+  './js/core/supa.js',
+  './js/core/config.js',
+  './js/core/crypto.js',
+  './js/planner/planner.js',
+  './js/planner/tasks.js',
+  './js/diary/diary.js',
+  './js/diary/topics.js',
+  './js/diary/quotes.js',
+  './js/diary/recorder.js',
+  './js/diary/transcribe.js',
+  './js/diary/photos.js',
+  './js/diary/video.js',
+  './js/diary/exif.js',
+  './js/diary/geo.js',
 ];
 
 self.addEventListener('install', e => {

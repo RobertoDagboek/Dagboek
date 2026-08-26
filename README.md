@@ -11,7 +11,6 @@ into text automatically. Add photos and a location. Everything is yours and priv
 - **Tags and search** — label an entry `#werk` or `#verjaarsdag`, then find every
   entry by tag, by keyword, or by date range.
 - **Location** from your phone/PC, with a readable place name.
-- **AF / EN** toggle for the whole interface.
 - Installable on your phone (PWA), works offline for reading.
 - **No build step.** Plain HTML + ES modules — push it to GitHub, it runs.
 

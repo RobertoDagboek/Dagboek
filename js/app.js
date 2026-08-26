@@ -10,26 +10,25 @@ import {
   failedTries, bumpFailedTries, resetFailedTries, MAX_PIN_TRIES,
   getSecretBox, setSecretBox,
   setOpenAIKey, openAIKey, takeLegacyPlainKey,
-} from './config.js';
-import { t, lang, applyI18n, toggleLang, formatDate } from './i18n.js';
+} from './core/config.js';
 import {
   deriveCredentials, slugUser, newSlug, makeCheck, verifyCheck,
   encryptWith, decryptWith, cryptoAvailable,
-} from './crypto.js';
-import * as db from './supa.js';
-import { loadItems } from './tasks.js';
+} from './core/crypto.js';
+import * as db from './core/supa.js';
+import { loadItems } from './planner/tasks.js';
 import {
   $, ICON_PLUS, ICON_TODAY, ICON_WEEK, ICON_GOALS, ICON_INBOX, ICON_DIARY,
   todayStr, fmtDateFull, Spring, runSpring,
   sheetEl, openSheet, closeSheet, toast,
-} from './ui.js';
+} from './core/ui.js';
 import {
   renderToday, renderWeek, renderGoals, renderInbox,
   openCaptureSheet, inboxCount, goalsSoonCount, monthCursorLabel,
-} from './planner.js';
+} from './planner/planner.js';
 import {
   renderDiary, setDiarySession, loadDiaryIndex, diarySubtitle, closeViewer,
-} from './diary.js';
+} from './diary/diary.js';
 
 /* ===================== state ===================== */
 
@@ -43,17 +42,16 @@ const PIN_MIN = 4;
 const PIN_MAX = 8;
 
 const TABS = [
-  { id: 'today', icon: ICON_TODAY, key: 'tab.today' },
-  { id: 'week', icon: ICON_WEEK, key: 'tab.calendar' },
-  { id: 'diary', icon: ICON_DIARY, key: 'tab.diary' },
-  { id: 'goals', icon: ICON_GOALS, key: 'tab.goals' },
-  { id: 'inbox', icon: ICON_INBOX, key: 'tab.inbox' },
+  { id: 'today', icon: ICON_TODAY, label: 'Today' },
+  { id: 'week', icon: ICON_WEEK, label: 'Calendar' },
+  { id: 'diary', icon: ICON_DIARY, label: 'Diary' },
+  { id: 'goals', icon: ICON_GOALS, label: 'Goals' },
+  { id: 'inbox', icon: ICON_INBOX, label: 'Inbox' },
 ];
 
 /* ===================== boot ===================== */
 
 async function boot() {
-  applyI18n();
   wireChrome();
 
   if (!hasProject()) {
@@ -106,13 +104,6 @@ function wireChrome() {
   $('fabAdd').innerHTML = ICON_PLUS;
   $('fabAdd').addEventListener('click', () => openCaptureSheet(screen === 'diary' ? 'diary' : null));
   $('gearBtn').addEventListener('click', openSettings);
-  $('langBtn').addEventListener('click', () => {
-    toggleLang();
-    applyI18n();
-    $('langBtn').textContent = lang.toUpperCase();
-    renderAll();
-  });
-  $('langBtn').textContent = lang.toUpperCase();
 
   $('viewer-close').addEventListener('click', closeViewer);
   $('viewer').addEventListener('click', e => { if (e.target === $('viewer')) closeViewer(); });
@@ -190,7 +181,7 @@ function renderTabBar() {
     if (tab.id === 'inbox' && inbox) badge = `<span class="tab-badge">${inbox > 99 ? '99+' : inbox}</span>`;
     if (tab.id === 'goals' && goals) badge = `<span class="tab-badge">${goals}</span>`;
     return `<button class="tab-btn ${screen === tab.id ? 'active' : ''}" data-tab="${tab.id}" type="button">
-      ${tab.icon}${badge}<span class="tlabel">${t(tab.key)}</span>
+      ${tab.icon}${badge}<span class="tlabel">${tab.label}</span>
     </button>`;
   }).join('');
   el.querySelectorAll('[data-tab]').forEach(b =>
@@ -200,11 +191,11 @@ function renderTabBar() {
 function renderHeader() {
   const title = $('navTitle');
   const sub = $('navSub');
-  if (screen === 'today') { title.textContent = t('tab.today'); sub.textContent = fmtDateFull(today); }
-  else if (screen === 'week') { title.textContent = t('tab.calendar'); sub.textContent = monthCursorLabel(); }
-  else if (screen === 'diary') { title.textContent = t('tab.diary'); sub.textContent = diarySubtitle(); }
-  else if (screen === 'goals') { title.textContent = t('tab.goals'); sub.textContent = t('sub.goals'); }
-  else if (screen === 'inbox') { title.textContent = t('tab.inbox'); sub.textContent = t('sub.inbox'); }
+  if (screen === 'today') { title.textContent = 'Today'; sub.textContent = fmtDateFull(today); }
+  else if (screen === 'week') { title.textContent = 'Calendar'; sub.textContent = monthCursorLabel(); }
+  else if (screen === 'diary') { title.textContent = 'Diary'; sub.textContent = diarySubtitle(); }
+  else if (screen === 'goals') { title.textContent = 'Goals'; sub.textContent = 'Things with a deadline'; }
+  else if (screen === 'inbox') { title.textContent = 'Inbox'; sub.textContent = 'Not scheduled yet'; }
 }
 
 function renderAll(seed) {
@@ -227,7 +218,7 @@ function accountSlug() {
 function askForPin() {
   showLock();
   if (!cryptoAvailable()) {
-    $('pin-msg').textContent = t('pin.noCrypto');
+    $('pin-msg').textContent = 'This browser cannot store a PIN safely. Use https.';
     return;
   }
   const known = hasLock() && settings().username && session;
@@ -252,15 +243,19 @@ function renderPin() {
   $('pin-switch').hidden = !unlocking;
 
   $('pin-greet').textContent = unlocking
-    ? t('pin.greet', { name: settings().username })
-    : mode === 'create' ? t('pin.greetNew')
-    : mode === 'signin' && !settings().username ? t('pin.firstTime')
+    ? `Welcome back, ${settings().username}`
+    : mode === 'create' ? 'Pick a name and a PIN. That is all.'
+    : mode === 'signin' && !settings().username ? 'First time? Press “New account” below.'
     : '';
 
-  $('pin-prompt').textContent = t({
-    unlock: 'pin.enter', signin: 'pin.signin', create: 'pin.create',
-    confirm: 'pin.confirm', change: 'pin.create', changeConfirm: 'pin.confirm',
-  }[mode]);
+  $('pin-prompt').textContent = {
+    unlock: 'Enter your PIN',
+    signin: 'Enter your name and PIN',
+    create: 'Choose a PIN',
+    confirm: 'Enter the PIN again',
+    change: 'Choose a PIN',
+    changeConfirm: 'Enter the PIN again',
+  }[mode];
 
   const dots = $('pin-dots');
   dots.innerHTML = '';
@@ -283,11 +278,11 @@ function pinPress(k) {
 
 async function pinSubmit() {
   const value = pin.buffer;
-  if (value.length < PIN_MIN) { $('pin-msg').textContent = t('pin.tooShort'); return; }
+  if (value.length < PIN_MIN) { $('pin-msg').textContent = 'At least 4 digits — 6 is safer.'; return; }
 
   if (pin.mode === 'create') {
     const name = slugUser($('pin-user').value);
-    if (!name) { $('pin-msg').textContent = t('pin.needName'); return; }
+    if (!name) { $('pin-msg').textContent = 'Enter a username.'; return; }
     pin.newUser = name; pin.first = value; pin.buffer = ''; pin.mode = 'confirm';
     $('pin-msg').textContent = '';
     return renderPin();
@@ -295,14 +290,14 @@ async function pinSubmit() {
   if (pin.mode === 'confirm') {
     if (value !== pin.first) {
       pin.mode = 'create'; pin.first = ''; pin.buffer = '';
-      $('pin-msg').textContent = t('pin.mismatch');
+      $('pin-msg').textContent = 'The two PINs do not match. Start again.';
       return renderPin();
     }
     return finishLogin(pin.newUser, value, { creating: true });
   }
   if (pin.mode === 'signin') {
     const name = slugUser($('pin-user').value);
-    if (!name) { $('pin-msg').textContent = t('pin.needName'); return; }
+    if (!name) { $('pin-msg').textContent = 'Enter a username.'; return; }
     return finishLogin(name, value, { creating: false });
   }
   if (pin.mode === 'change') {
@@ -313,11 +308,11 @@ async function pinSubmit() {
   if (pin.mode === 'changeConfirm') {
     if (value !== pin.first) {
       pin.mode = 'change'; pin.first = ''; pin.buffer = '';
-      $('pin-msg').textContent = t('pin.mismatch');
+      $('pin-msg').textContent = 'The two PINs do not match. Start again.';
       return renderPin();
     }
     pin.busy = true;
-    $('pin-msg').textContent = t('pin.working');
+    $('pin-msg').textContent = 'Working…';
     try {
       const username = settings().username;
       const { password, localKey } = await deriveCredentials(accountSlug(), value);
@@ -329,7 +324,7 @@ async function pinSubmit() {
       resetFailedTries();
       pin.busy = false;
       await enterApp();
-      toast(t('pin.set'));
+      toast('PIN saved');
     } catch (e) {
       pin.busy = false; pin.buffer = '';
       $('pin-msg').textContent = e.message;
@@ -340,7 +335,7 @@ async function pinSubmit() {
 
   // unlock: offline check against the stored token
   pin.busy = true;
-  $('pin-msg').textContent = t('pin.working');
+  $('pin-msg').textContent = 'Working…';
   try {
     const { localKey } = await deriveCredentials(accountSlug(), value);
     await verifyCheck(localKey, getLock().check);
@@ -358,17 +353,17 @@ async function pinSubmit() {
       clearLock();
       saveSettings({ username: '', slug: '' });
       await db.signOut();
-      $('pin-msg').textContent = t('pin.locked');
+      $('pin-msg').textContent = 'Too many wrong tries. Start again.';
       return setTimeout(() => location.reload(), 2500);
     }
-    $('pin-msg').textContent = t('pin.wrong', { n: left });
+    $('pin-msg').textContent = `Wrong name or PIN. ${left} tries left.`;
     renderPin();
   }
 }
 
 async function finishLogin(username, value, { creating }) {
   pin.busy = true;
-  $('pin-msg').textContent = t(creating ? 'pin.signup' : 'pin.working');
+  $('pin-msg').textContent = creating ? 'Creating your account…' : 'Working…';
   try {
     let slug;
     let legacy = false;
@@ -420,10 +415,10 @@ async function finishLogin(username, value, { creating }) {
 
 function loginError(e, creating) {
   const msg = String(e?.message || e);
-  if (/USERNAME_TAKEN|already|exists|registered/i.test(msg)) return t('pin.taken');
-  if (/[Ss]ignups? not allowed|signup_disabled/i.test(msg)) return t('pin.signupOff');
-  if (/Invalid login credentials/i.test(msg)) return t('pin.noAccount');
-  return creating ? msg : `${t('pin.wrongNet')} (${msg})`;
+  if (/USERNAME_TAKEN|already|exists|registered/i.test(msg)) return 'That name is already taken. Pick another.';
+  if (/[Ss]ignups? not allowed|signup_disabled/i.test(msg)) return 'New accounts are disabled in Supabase.';
+  if (/Invalid login credentials/i.test(msg)) return 'No account with that name and PIN. Press “New account” below.';
+  return creating ? msg : `${'Wrong name or PIN.'} (${msg})`;
 }
 
 /* ===================== settings ===================== */
@@ -432,48 +427,48 @@ function openSettings() {
   const s = settings();
   sheetEl().innerHTML = `
     <div class="sheet-handle"></div>
-    <div class="sheet-title">${t('set.title')}</div>
+    <div class="sheet-title">${'Settings'}</div>
 
     <div class="field-group">
-      <div class="field-row"><span class="fname">${t('set.username')}</span>
+      <div class="field-row"><span class="fname">${'Username'}</span>
         <input type="text" id="setUsername" value="${s.username}" autocapitalize="none" spellcheck="false"></div>
-      <div class="field-row"><span class="fname">${t('set.rename')}</span>
-        <button class="link" id="btnRename" type="button">${t('btn.save')}</button></div>
+      <div class="field-row"><span class="fname">${'Change name'}</span>
+        <button class="link" id="btnRename" type="button">${'Save'}</button></div>
     </div>
-    <p class="sheet-hint">${t('set.usernameHint')}</p>
+    <p class="sheet-hint">${'Your name is just a label — change it freely. Your login, your PIN and your data stay exactly as they are.'}</p>
 
     <div class="field-group" style="margin-top:14px;">
-      <div class="field-row"><span class="fname">${t('set.apikey')}</span>
+      <div class="field-row"><span class="fname">${'OpenAI key'}</span>
         <input type="password" id="setOpenai" value="${openAIKey()}" placeholder="sk-..." autocomplete="off" spellcheck="false"></div>
-      <div class="field-row"><span class="fname">${t('set.model')}</span>
+      <div class="field-row"><span class="fname">${'Speech model'}</span>
         <select id="setModel">
           <option value="gpt-4o-transcribe" ${s.model === 'gpt-4o-transcribe' ? 'selected' : ''}>gpt-4o-transcribe</option>
           <option value="gpt-4o-mini-transcribe" ${s.model === 'gpt-4o-mini-transcribe' ? 'selected' : ''}>gpt-4o-mini-transcribe</option>
           <option value="whisper-1" ${s.model === 'whisper-1' ? 'selected' : ''}>whisper-1</option>
         </select></div>
-      <div class="field-row"><span class="fname">${t('set.lang')}</span>
+      <div class="field-row"><span class="fname">${'Voice note language'}</span>
         <select id="setSttLang">
-          <option value="" ${!s.sttLang ? 'selected' : ''}>${t('set.auto')}</option>
+          <option value="" ${!s.sttLang ? 'selected' : ''}>${'Auto (AF + EN)'}</option>
           <option value="af" ${s.sttLang === 'af' ? 'selected' : ''}>Afrikaans</option>
           <option value="en" ${s.sttLang === 'en' ? 'selected' : ''}>English</option>
         </select></div>
     </div>
-    <p class="sheet-hint">${t('set.apikeyHint')}</p>
+    <p class="sheet-hint">${'Encrypted with your PIN and kept in this browser only — never on GitHub or Supabase.'}</p>
 
-    <div class="fname" style="margin:14px 2px 6px;">${t('set.vocab')}</div>
+    <div class="fname" style="margin:14px 2px 6px;">${'Word list'}</div>
     <textarea id="setVocab" class="sheet-notes" placeholder="Riebeeck-Kasteel, oupa Hennie, bakkie">${s.vocab}</textarea>
-    <p class="sheet-hint">${t('set.vocabHint')}</p>
+    <p class="sheet-hint">${'Names of people, places and words you use often, comma separated. This helps a lot with accents and proper nouns.'}</p>
 
     <div class="sheet-move-row" style="margin-top:16px;">
-      <button class="sheet-move-btn" id="btnChangePin" type="button">${t('set.changePin')}</button>
-      <button class="sheet-move-btn" id="btnExport" type="button">${t('set.export')}</button>
-      <button class="sheet-move-btn" id="btnSignout" type="button" style="color:var(--sys-red);">${t('set.signout')}</button>
+      <button class="sheet-move-btn" id="btnChangePin" type="button">${'Change PIN'}</button>
+      <button class="sheet-move-btn" id="btnExport" type="button">${'Download everything'}</button>
+      <button class="sheet-move-btn" id="btnSignout" type="button" style="color:var(--sys-red);">${'Sign out'}</button>
     </div>
     <p class="sheet-hint" id="setStatus"></p>
 
     <div class="sheet-actions">
-      <button class="sheet-cancel" id="setCancel" type="button">${t('btn.cancel')}</button>
-      <button class="sheet-save" id="setSave" type="button">${t('btn.save')}</button>
+      <button class="sheet-cancel" id="setCancel" type="button">${'Cancel'}</button>
+      <button class="sheet-save" id="setSave" type="button">${'Save'}</button>
     </div>`;
 
   $('setCancel').addEventListener('click', closeSheet);
@@ -487,7 +482,7 @@ function openSettings() {
     try {
       if (cryptoKey) setSecretBox(key ? await encryptWith(cryptoKey, key) : null);
       setOpenAIKey(key);
-      toast(t('set.saved'));
+      toast('Saved');
       closeSheet();
     } catch (e) { toast(e.message); }
   });
@@ -502,29 +497,29 @@ function openSettings() {
 async function renameAccount() {
   const wanted = slugUser($('setUsername').value);
   const status = $('setStatus');
-  if (!wanted) { status.textContent = t('pin.needName'); return; }
-  if (wanted === settings().username) { status.textContent = t('rename.same'); return; }
-  status.textContent = t('pin.working');
+  if (!wanted) { status.textContent = 'Enter a username.'; return; }
+  if (wanted === settings().username) { status.textContent = 'That is already your name.'; return; }
+  status.textContent = 'Working…';
   try {
-    if (await db.slugFor(wanted)) { status.textContent = t('rename.taken'); return; }
+    if (await db.slugFor(wanted)) { status.textContent = 'That name is already taken.'; return; }
     await db.renameHandle(session.user.id, wanted);
     saveSettings({ username: wanted });
     const lock = getLock();
     if (lock) setLock({ ...lock, user: wanted });
     status.textContent = '';
-    toast(t('rename.done', { name: wanted }));
+    toast(`Name changed to ${wanted}`);
   } catch (e) {
     const msg = String(e?.message || e);
-    status.textContent = /duplicate|unique/i.test(msg) ? t('rename.taken')
-      : /relation|does not exist|schema cache/i.test(msg) ? t('rename.needsMigration')
-      : t('rename.failed', { msg });
+    status.textContent = /duplicate|unique/i.test(msg) ? 'That name is already taken.'
+      : /relation|does not exist|schema cache/i.test(msg) ? 'Run migration 004 in the Supabase SQL editor first.'
+      : `Could not change the name. (${msg})`;
   }
 }
 
 async function exportAll() {
   try {
     const entries = await db.listEntries({ limit: 5000 });
-    const { items } = await import('./tasks.js');
+    const { items } = await import('./planner/tasks.js');
     const blob = new Blob([JSON.stringify({ entries, planner: items }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
