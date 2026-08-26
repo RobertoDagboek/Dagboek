@@ -1,5 +1,5 @@
 /**
- * Pull the CSS and JS out of one of Ruan's single-file planner builds, so two
+ * Pull the CSS and JS out of one of the single-file planner builds, so two
  * versions can be diffed like normal source files.
  *
  *   node tools/planner-extract.mjs vendor/planner/planner_9.html

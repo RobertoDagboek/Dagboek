@@ -1,6 +1,6 @@
-# Ruan's planner - original builds
+# The planner - original builds
 
-Drop each version he sends in here, unchanged, named by version:
+Drop each version your brother sends in here, unchanged, named by version:
 
     vendor/planner/planner_9.html      <- the one this app was built from
     vendor/planner/planner_10.html     <- the next one, when it arrives
