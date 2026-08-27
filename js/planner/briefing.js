@@ -57,7 +57,7 @@ export function openBriefing(today = todayStr()) {
     sheetEl().innerHTML = `
       <div class="sheet-handle"></div>
       <div class="sheet-title">Today</div>
-      <p class="sheet-hint" style="margin:-6px 2px 14px;">${fmtDateFull(today)} &middot; ${todays.length} task${todays.length === 1 ? '' : 's'}${done ? `, ${done} already done` : ''}</p>
+      <p class="sheet-hint" style="margin:-4px 2px 18px;">${fmtDateFull(today)} &middot; ${todays.length} task${todays.length === 1 ? '' : 's'}${done ? `, ${done} already done` : ''}</p>
 
       ${dueGoals.length ? `<div class="deadline-banner">
         <div class="deadline-title">&#9873; ${dueGoals.length === 1 ? 'Goal due today' : 'Goals due today'}</div>
@@ -69,13 +69,13 @@ export function openBriefing(today = todayStr()) {
         <button class="brief-sort-btn ${mode === 'priority' ? 'is-on' : ''}" data-sort="priority" type="button">By matrix</button>
       </div>
 
+      ${mode === 'priority' ? matrixKeyHtml() : ''}
+
       <div class="group brief-list">
         ${todays.length
           ? todays.map(x => rowHtml(x, today)).join('')
           : '<div class="empty-note">Nothing scheduled today.</div>'}
       </div>
-
-      ${mode === 'priority' ? matrixKeyHtml() : ''}
 
       <p class="sheet-hint">${mode === 'priority'
         ? 'Place each one in the matrix. Today will keep this order.'
