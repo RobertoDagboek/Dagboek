@@ -7,6 +7,7 @@
 // which does not exist outside the environment it was written in.
 
 import { items, saveItems } from './tasks.js';
+import { settings } from '../core/config.js';
 import {
   $, escapeHtml, uid, Spring, runSpring, project, rubberband,
   ICON_CHECK, ICON_TRASH, ICON_CHEVRON, ICON_BOLT,
@@ -49,6 +50,11 @@ function isDoneOnDate(t2, dateStr) {
 }
 function isCarried(t2) { return t2.kind === 'task' && t2.recurring === 'none' && t2.date && t2.date < TODAY() && !t2.completed; }
 function daysOverdue(t2) { return Math.max(0, daysBetween(t2.date, TODAY())); }
+/** Goals whose deadline falls on this date. */
+export function goalsDueOn(dateStr) {
+  return items.filter(x => x.kind === 'goal' && x.deadline === dateStr);
+}
+
 export function isInboxTask(t2) { return t2.kind === 'task' && !t2.draft && t2.recurring === 'none' && !t2.date; }
 export function drafts() { return items.filter(x => x.draft); }
 export function draftCount() { return drafts().length; }
@@ -86,6 +92,27 @@ function wireContextFilter(el) {
 
 /* ===================== TODAY ===================== */
 
+/**
+ * How Today is ordered. Done always sinks. Beyond that it follows whichever
+ * sort was chosen in the morning briefing: by clock time, or by priority with
+ * time breaking ties.
+ */
+export function todayOrder(today, mode = settings().todaySort) {
+  return (a, b) => {
+    const ad = isDoneOnDate(a, today), bd = isDoneOnDate(b, today);
+    if (ad !== bd) return ad ? 1 : -1;
+
+    if (mode === 'priority') {
+      const ap = Number(a.priority) || 2, bp = Number(b.priority) || 2;
+      if (ap !== bp) return ap - bp;
+    } else {
+      const af = a.flagged ? 0 : 1, bf = b.flagged ? 0 : 1;
+      if (af !== bf) return af - bf;
+    }
+    return (a.time || 'zz').localeCompare(b.time || 'zz') || (a.order || 0) - (b.order || 0);
+  };
+}
+
 export function renderToday() {
   const el = $('screenContent');
   const today = TODAY();
@@ -94,13 +121,7 @@ export function renderToday() {
     .sort((a, b) => a.deadline.localeCompare(b.deadline));
 
   const todays = items.filter(x => x.kind === 'task' && (appliesOnDate(x, today) || isCarried(x)) && matchesContext(x));
-  todays.sort((a, b) => {
-    const ad = isDoneOnDate(a, today), bd = isDoneOnDate(b, today);
-    if (ad !== bd) return ad ? 1 : -1;
-    const af = a.flagged ? 0 : 1, bf = b.flagged ? 0 : 1;
-    if (af !== bf) return af - bf;
-    return (a.time || 'zz').localeCompare(b.time || 'zz') || (a.order || 0) - (b.order || 0);
-  });
+  todays.sort(todayOrder(today));
   const doneCount = todays.filter(x => isDoneOnDate(x, today)).length;
 
   let html = contextFilterHtml();
@@ -181,6 +202,8 @@ function taskRowHtml(x, dateStr) {
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
   if (x.context) meta.push(`<span class="meta-chip">${escapeHtml(x.context)}</span>`);
   if (x.estimate) meta.push(`<span class="meta-chip">&#9201; ${escapeHtml(x.estimate)}</span>`);
+  if (Number(x.priority) === 1) meta.push('<span class="meta-chip prio-high">high</span>');
+  if (Number(x.priority) === 3) meta.push('<span class="meta-chip prio-low">low</span>');
   if (x.goalId) meta.push(`<span class="meta-chip goal">goal</span>`);
   return `<div class="swipe-slot" data-taskslot="${x.id}">
       <div class="swipe-bg">
@@ -393,6 +416,7 @@ function renderMonthGridHtml() {
   html += `<div class="month-legend">
     ${CONTEXTS.map(c => `<span class="mleg-item"><span class="mleg-dot" style="background:${CONTEXT_COLORS[c]}"></span>${c}</span>`).join('')}
     <span class="mleg-item"><span class="mc-diary"></span>Diary</span>
+    <span class="mleg-item"><span class="mleg-flag">&#9873;</span>Goal due</span>
   </div>`;
 
   html += `<div class="month-dow-row">${dowLabels('short').map(d => `<div class="month-dow">${d}</div>`).join('')}</div>`;
@@ -407,7 +431,10 @@ function renderMonthGridHtml() {
       const dayItems = items.filter(x => x.kind === 'task' && appliesOnDate(x, d) && matchesContext(x));
       const ctxs = [...new Set(dayItems.map(x => x.context).filter(Boolean))];
       const hasDiary = diaryDays.has(d);
-      html += `<button class="month-cell ${inMonth ? '' : 'outmonth'} ${d === today ? 'is-today' : ''}" data-monthday="${d}" type="button">
+      const dueGoals = goalsDueOn(d);
+      const openGoal = dueGoals.some(g => !g.finished);
+      html += `<button class="month-cell ${inMonth ? '' : 'outmonth'} ${d === today ? 'is-today' : ''} ${dueGoals.length ? 'is-deadline' : ''} ${openGoal ? '' : 'goal-done'}" data-monthday="${d}" type="button">
+        ${dueGoals.length ? `<span class="mc-flag" title="${escapeHtml(dueGoals.map(g => g.title).join(', '))}">&#9873;</span>` : ''}
         <span class="mc-num">${dayNum(d)}</span>
         ${(dayItems.length || hasDiary) ? `<span class="mc-dots">
           ${ctxs.slice(0, 3).map(c => `<span class="mc-dot" style="background:${CONTEXT_COLORS[c] || 'var(--sys-gray)'}"></span>`).join('')}
@@ -432,10 +459,18 @@ function openDayDetail(dateStr) {
   const dayItems = items.filter(x => x.kind === 'task' && appliesOnDate(x, dateStr) && matchesContext(x));
   dayItems.sort((a, b) => (a.time || 'zz').localeCompare(b.time || 'zz') || (a.order || 0) - (b.order || 0));
   const hasDiary = diaryDatesInRange(dateStr, dateStr).has(dateStr);
+  const dueGoals = goalsDueOn(dateStr);
 
   sheetEl().innerHTML = `
     <div class="sheet-handle"></div>
     <div class="sheet-title">${fmtDateFull(dateStr)}</div>
+    ${dueGoals.length ? `<div class="deadline-banner">
+      <div class="deadline-title">&#9873; ${dueGoals.length === 1 ? 'Goal due today' : 'Goals due today'}</div>
+      ${dueGoals.map(g => `<div class="deadline-item" data-goaldue="${g.id}">
+        <span class="${g.finished ? 'done' : ''}">${escapeHtml(g.title)}</span>
+        <span>${g.finished ? 'done' : 'open'}</span>
+      </div>`).join('')}
+    </div>` : ''}
     <div class="group" style="margin-bottom:14px;">
       ${dayItems.length ? dayItems.map(x => dayRowHtml(x, dateStr)).join('') : `<div class="empty-note">Nothing planned.</div>`}
     </div>
@@ -445,6 +480,8 @@ function openDayDetail(dateStr) {
     <div class="sheet-actions"><button class="sheet-cancel" id="dayClose" type="button">Close</button></div>`;
 
   $('dayClose').addEventListener('click', closeSheet);
+  sheetEl().querySelectorAll('[data-goaldue]').forEach(b => b.addEventListener('click', e =>
+    openPlannerEditor(e.currentTarget.getAttribute('data-goaldue'))));
   $('dayDiaryBtn').addEventListener('click', () => { closeSheet(); openDiaryDate(dateStr); });
   sheetEl().querySelectorAll('[data-check]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
@@ -637,7 +674,7 @@ function inboxRowHtml(x) {
 
 function newTask(over = {}) {
   return {
-    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none', repeatDays: [],
+    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none', repeatDays: [], priority: 2,
     flagged: false, context: '', completed: false, lastCompletedDate: null, goalId: null,
     startedDate: '', lastTouchedDate: '', deadline: '', finished: false, finishedDate: null,
     order: Date.now(), createdAt: Date.now(), ...over,

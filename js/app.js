@@ -27,6 +27,7 @@ import {
   renderToday, renderWeek, renderGoals, renderInbox,
   openCaptureSheet, inboxCount, goalsSoonCount, monthCursorLabel,
 } from './planner/planner.js';
+import { maybeBrief, openBriefing } from './planner/briefing.js';
 import {
   renderDiary, setDiarySession, loadDiaryIndex, diarySubtitle, closeViewer,
 } from './diary/diary.js';
@@ -110,6 +111,8 @@ async function enterApp() {
     toast(e.message);
   }
   renderAll();
+  // First open of the day only. Never on a refresh, never twice.
+  maybeBrief(today);
 
   db.myHandle().then(h => {
     if (h?.username && h.username !== settings().username) {
@@ -164,7 +167,7 @@ function wireChrome() {
 
   setInterval(() => {
     const now = todayStr();
-    if (now !== today) { today = now; renderAll(); }
+    if (now !== today) { today = now; renderAll(); maybeBrief(today); }
   }, 60000);
 }
 
@@ -532,6 +535,7 @@ function openSettings() {
 
     <div class="sheet-move-row" style="margin-top:16px;">
       <button class="sheet-move-btn" id="btnChangePin" type="button">Change PIN</button>
+      <button class="sheet-move-btn" id="btnBrief" type="button">Today's briefing</button>
       <button class="sheet-move-btn" id="btnExport" type="button">Download everything</button>
       <button class="sheet-move-btn" id="btnSignout" type="button" style="color:var(--sys-red);">Sign out</button>
     </div>
@@ -560,6 +564,7 @@ function openSettings() {
   wireBiometricToggle();
   $('btnRename').addEventListener('click', renameAccount);
   $('btnChangePin').addEventListener('click', () => { closeSheet(); startLogin({ mode: 'change' }); });
+  $('btnBrief').addEventListener('click', () => { closeSheet(); setTimeout(() => openBriefing(today), 260); });
   $('btnExport').addEventListener('click', exportAll);
   $('btnSignout').addEventListener('click', async () => { await db.signOut(); location.reload(); });
 

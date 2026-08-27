@@ -27,6 +27,8 @@ const DEFAULTS = {
   vocab: '',            // names/places you say often - fed to the model as a hint
   username: '',         // remembered on this device, so you only type the PIN
   slug: '',             // permanent account id the credentials derive from
+  todaySort: 'time',    // 'time' or 'priority' - chosen in the daily briefing
+  lastBriefing: '',     // the day the briefing was last shown
 };
 
 let cache = null;

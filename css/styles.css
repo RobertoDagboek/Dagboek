@@ -566,3 +566,59 @@ mark { background: rgba(10,132,255,0.3); color: inherit; border-radius: 3px; pad
   cursor: pointer;
 }
 .draft-banner .goal-banner-title { color: var(--sys-yellow); }
+
+/* ---------- a goal's deadline on the calendar ---------- */
+.month-cell.is-deadline {
+  box-shadow: inset 0 0 0 1.5px var(--sys-purple);
+  background: linear-gradient(180deg, rgba(191,90,242,0.22), rgba(191,90,242,0.07));
+}
+.month-cell.is-deadline.is-today {
+  box-shadow: inset 0 0 0 2px var(--sys-purple);
+  background: var(--sys-blue);
+}
+.month-cell.is-deadline.goal-done { opacity: 0.55; }
+.mc-flag {
+  position: absolute; top: 2px; right: 4px;
+  font-size: 9px; color: var(--sys-purple); line-height: 1; pointer-events: none;
+}
+.month-cell { position: relative; }
+.mleg-flag { color: var(--sys-purple); font-size: 10px; }
+
+.deadline-banner {
+  background: linear-gradient(160deg, rgba(191,90,242,0.2), rgba(191,90,242,0.06));
+  border: 0.5px solid rgba(191,90,242,0.35);
+  border-radius: var(--r-md); padding: 12px 14px; margin-bottom: 14px;
+}
+.deadline-title {
+  font-size: 12px; font-weight: 700; color: var(--sys-purple);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;
+}
+.deadline-item {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-size: 14.5px; padding: 3px 0; cursor: pointer;
+}
+.deadline-item .done { opacity: 0.5; text-decoration: line-through; }
+
+/* ---------- the morning briefing ---------- */
+.brief-sort { display: flex; gap: 8px; margin-bottom: 12px; }
+.brief-sort-btn {
+  flex: 1; padding: 10px; border: none; border-radius: var(--r-sm);
+  background: var(--bg-elevated-2); color: var(--label-secondary);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.brief-sort-btn.is-on { background: var(--sys-blue); color: #fff; }
+.brief-list { max-height: 42vh; overflow-y: auto; }
+.brief-row { align-items: flex-start; }
+
+.prio-row { display: flex; gap: 6px; margin-top: 8px; }
+.prio-btn {
+  padding: 5px 11px; border: none; border-radius: var(--r-pill);
+  background: var(--bg-elevated-3); color: var(--label-secondary);
+  font-size: 11.5px; font-weight: 700; cursor: pointer;
+}
+.prio-btn.p1.is-on { background: var(--sys-red); color: #fff; }
+.prio-btn.p2.is-on { background: var(--sys-blue); color: #fff; }
+.prio-btn.p3.is-on { background: var(--bg-elevated-2); color: var(--label-tertiary); }
+
+.meta-chip.prio-high { background: rgba(255,69,58,0.2); color: var(--sys-red); font-weight: 700; }
+.meta-chip.prio-low { background: var(--bg-elevated-2); color: var(--label-tertiary); }
