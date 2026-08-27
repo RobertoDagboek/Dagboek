@@ -133,6 +133,7 @@ function wireChrome() {
   $('scrim').addEventListener('click', closeSheet);
 
   document.addEventListener('app:refresh', renderAll);
+  document.addEventListener('app:badges', renderTabBar);
   document.addEventListener('app:subtitle', renderHeader);
   document.addEventListener('app:goto', e => {
     const { screen: target, seed } = e.detail || {};

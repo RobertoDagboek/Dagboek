@@ -19,7 +19,7 @@ import {
 } from './video.js';
 import {
   $, escapeHtml, uid, todayStr, addDays, fmtDateFull, fmtMonthDay,
-  ICON_CHECK, ICON_TRASH, ICON_MIC, ICON_CHEVRON, toast, refresh,
+  ICON_CHECK, ICON_TRASH, ICON_MIC, ICON_CHEVRON, toast,
 } from '../core/ui.js';
 
 /* ===================== state ===================== */
@@ -44,6 +44,7 @@ let dirty = false;
 let filling = false;
 let quote = null;
 let entryDates = new Set();   // every date that has an entry, for the month dots
+let editorFor = null;         // which date the editor on screen belongs to
 let viewerUrl = null;
 
 export function setDiarySession(session) { state.session = session; }
@@ -73,6 +74,14 @@ export function openDiaryDate(dateStr, seedText) {
 /* ===================== screen ===================== */
 
 export function renderDiary(seedText) {
+  // Anything can ask for a redraw - a task saving, midnight passing. If this
+  // screen is holding words that are not in the database yet, rebuilding it
+  // would throw them away, so keep what is on screen instead.
+  if (dirty && !state.search.trim() && editorFor === state.date && $('sections')) {
+    if (seedText) appendToTopic(state.topic, seedText);
+    return;
+  }
+
   const el = $('screenContent');
   if (!quote) quote = randomQuote();
 
@@ -170,6 +179,7 @@ async function renderEditor(seedText) {
   buildSections();
   buildTopicChips();
   wireEditor();
+  editorFor = state.date;
   await loadDate(state.date);
   if (seedText) appendToTopic(state.topic, seedText);
 }
@@ -209,6 +219,7 @@ async function gotoDate(date) {
 }
 
 async function loadDate(date) {
+  editorFor = date;
   state.audio = null; state.loc = null; state.entry = null; state.media = []; state.tags = [];
   renderAudio();
   try {
@@ -519,9 +530,12 @@ async function runTranscribe() {
   try {
     const text = await transcribe(state.audio.blob, state.audio.ext);
     if (text) appendToTopic(state.topic, text);
-    if (text) catchReminders(text);
     $('transcribeStatus').textContent = text ? `Text goes to “${topicLabel(state.topic)}”` : '';
+    // Save before looking for reminders. Catching one used to redraw the
+    // screen, which reloaded this entry from the database - and the transcript
+    // was not in it yet, so the words were reverted and then saved over.
     await saveEntry();
+    if (text) catchReminders(text);
   } catch (e) {
     $('transcribeStatus').textContent = e.code === 'NO_KEY' ? 'No OpenAI key yet — add it in Settings.' : e.message;
   } finally {
@@ -553,7 +567,9 @@ function catchReminders(text) {
   toast(found.length === 1
     ? `Reminder saved as a draft: ${found[0].subject}`
     : `${found.length} reminders saved as drafts`);
-  refresh();
+  // Badges only. A full refresh would rebuild this screen underneath the
+  // words that are still being written.
+  document.dispatchEvent(new CustomEvent('app:badges'));
 }
 
 /* ===================== location ===================== */
