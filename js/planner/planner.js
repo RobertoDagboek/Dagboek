@@ -8,6 +8,7 @@
 
 import { items, saveItems } from './tasks.js';
 import { settings } from '../core/config.js';
+import { QUADRANTS, quadrant, DEFAULT_QUADRANT } from './priority.js';
 import {
   $, escapeHtml, uid, Spring, runSpring, project, rubberband,
   ICON_CHECK, ICON_TRASH, ICON_CHEVRON, ICON_BOLT,
@@ -103,7 +104,7 @@ export function todayOrder(today, mode = settings().todaySort) {
     if (ad !== bd) return ad ? 1 : -1;
 
     if (mode === 'priority') {
-      const ap = Number(a.priority) || 2, bp = Number(b.priority) || 2;
+      const ap = Number(a.priority) || DEFAULT_QUADRANT, bp = Number(b.priority) || DEFAULT_QUADRANT;
       if (ap !== bp) return ap - bp;
     } else {
       const af = a.flagged ? 0 : 1, bf = b.flagged ? 0 : 1;
@@ -202,8 +203,10 @@ function taskRowHtml(x, dateStr) {
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
   if (x.context) meta.push(`<span class="meta-chip">${escapeHtml(x.context)}</span>`);
   if (x.estimate) meta.push(`<span class="meta-chip">&#9201; ${escapeHtml(x.estimate)}</span>`);
-  if (Number(x.priority) === 1) meta.push('<span class="meta-chip prio-high">high</span>');
-  if (Number(x.priority) === 3) meta.push('<span class="meta-chip prio-low">low</span>');
+  const q = quadrant(x.priority);
+  if (q.value !== DEFAULT_QUADRANT) {
+    meta.push(`<span class="meta-chip quad" style="--q:${q.colour}">${q.label}</span>`);
+  }
   if (x.goalId) meta.push(`<span class="meta-chip goal">goal</span>`);
   return `<div class="swipe-slot" data-taskslot="${x.id}">
       <div class="swipe-bg">
@@ -674,7 +677,7 @@ function inboxRowHtml(x) {
 
 function newTask(over = {}) {
   return {
-    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none', repeatDays: [], priority: 2,
+    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none', repeatDays: [], priority: DEFAULT_QUADRANT,
     flagged: false, context: '', completed: false, lastCompletedDate: null, goalId: null,
     startedDate: '', lastTouchedDate: '', deadline: '', finished: false, finishedDate: null,
     order: Date.now(), createdAt: Date.now(), ...over,
@@ -904,6 +907,13 @@ function editorHtml(x) {
       <div class="field-row" id="editDaysWrap" ${x.recurring === 'days' ? '' : 'hidden'}>
         ${dayTogglesHtml('editDays', x.repeatDays || [])}
       </div>
+      <div class="field-row" style="display:block;">
+        <span class="fname">Matrix</span>
+        <div class="prio-row" id="editPrio" style="margin-top:8px;">
+          ${QUADRANTS.map(q => `<button class="prio-btn ${(Number(x.priority) || DEFAULT_QUADRANT) === q.value ? 'is-on' : ''}"
+            style="--q:${q.colour}" data-value="${q.value}" title="${q.hint}" type="button">${q.label}</button>`).join('')}
+        </div>
+      </div>
       <div class="toggle-row"><span class="fname">Flagged</span>
         <button class="ios-switch ${x.flagged ? 'on' : ''}" id="editFlagToggle" data-on="${x.flagged ? '1' : '0'}" type="button"><span class="thumb"></span></button>
       </div>
@@ -923,6 +933,10 @@ function wireEditor(x) {
     $('moveNoneBtn').addEventListener('click', () => { $('editDate').value = ''; });
     wireTimePicker('editTime', '🕐 Time');
     wireEstimatePicker('editEstimate');
+    $('editPrio')?.querySelectorAll('[data-value]').forEach(b => b.addEventListener('click', e => {
+      $('editPrio').querySelectorAll('[data-value]').forEach(o => o.classList.remove('is-on'));
+      e.currentTarget.classList.add('is-on');
+    }));
     wireDayToggles('editDays');
     bindRepeatToggle('editRecur', 'editDaysWrap');
     const flag = $('editFlagToggle');
@@ -948,6 +962,8 @@ function wireEditor(x) {
       x.estimate = getEstimatePickerValue('editEstimate');
       x.recurring = $('editRecur').value;
       x.repeatDays = x.recurring === 'days' ? getDayToggles('editDays') : [];
+      const picked = $('editPrio')?.querySelector('[data-value].is-on');
+      x.priority = picked ? Number(picked.getAttribute('data-value')) : DEFAULT_QUADRANT;
       x.context = $('editContext').value || '';
       x.flagged = $('editFlagToggle').dataset.on === '1';
     }

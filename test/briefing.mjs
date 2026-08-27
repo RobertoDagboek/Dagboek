@@ -1,6 +1,8 @@
 /**
  * Today's ordering, and the once-a-day rule.   node test/briefing.mjs
  *
+ * Priority is the Eisenhower quadrant: 1 Do, 2 Schedule, 3 Delegate, 4 Drop.
+ *
  * Mirrors todayOrder() from js/planner/planner.js and the gate in
  * js/planner/briefing.js. Both are quiet failures if wrong - the briefing
  * appearing on every refresh would be maddening, and a bad sort just looks
@@ -39,10 +41,10 @@ const order = (label, list, mode, want) => {
 };
 
 const day = [
-  task('Invoices', { time: '14:00', priority: 3 }),
-  task('Open up', { time: '07:00', priority: 2 }),
-  task('Call bank', { time: '', priority: 1 }),
-  task('Sweep', { time: '16:30', priority: 3 }),
+  task('Invoices', { time: '14:00', priority: 3 }),   // delegate
+  task('Open up', { time: '07:00', priority: 2 }),    // schedule
+  task('Call bank', { time: '', priority: 1 }),       // do
+  task('Sweep', { time: '16:30', priority: 4 }),      // drop
 ];
 
 console.log('--- by time ---');
@@ -50,21 +52,21 @@ order('the clock decides, no time goes last', day, 'time',
   ['Open up', 'Invoices', 'Sweep', 'Call bank']);
 
 console.log('\n--- by priority ---');
-order('high first, time breaks ties', day, 'priority',
+order('quadrant order, time breaks ties', day, 'priority',
   ['Call bank', 'Open up', 'Invoices', 'Sweep']);
 
-order('two highs stay in clock order',
+order('two in the same quadrant stay in clock order',
   [task('B', { time: '11:00', priority: 1 }), task('A', { time: '09:00', priority: 1 })],
   'priority', ['A', 'B']);
 
-order('missing priority counts as normal',
-  [task('Low', { priority: 3 }), task('Unset', { priority: undefined }), task('High', { priority: 1 })],
-  'priority', ['High', 'Unset', 'Low']);
+order('unset counts as Schedule',
+  [task('Drop', { priority: 4 }), task('Unset', { priority: undefined }), task('Do', { priority: 1 })],
+  'priority', ['Do', 'Unset', 'Drop']);
 
 console.log('\n--- done always sinks ---');
 order('finished work goes to the bottom in either mode',
   [task('Done thing', { completed: true, priority: 1, time: '06:00' }),
-   task('Still to do', { priority: 3, time: '18:00' })],
+   task('Still to do', { priority: 4, time: '18:00' })],
   'priority', ['Still to do', 'Done thing']);
 
 order('and the same by time',
@@ -76,10 +78,10 @@ order('a flag lifts a task when sorting by time',
   [task('Plain', { time: '08:00' }), task('Flagged', { time: '17:00', flagged: true })],
   'time', ['Flagged', 'Plain']);
 
-order('but priority mode ignores the flag',
-  [task('Plain high', { time: '08:00', priority: 1 }),
-   task('Flagged low', { time: '17:00', flagged: true, priority: 3 })],
-  'priority', ['Plain high', 'Flagged low']);
+order('but matrix mode ignores the flag',
+  [task('Plain Do', { time: '08:00', priority: 1 }),
+   task('Flagged Drop', { time: '17:00', flagged: true, priority: 4 })],
+  'priority', ['Plain Do', 'Flagged Drop']);
 
 console.log('\n--- shown once a day, not once a refresh ---');
 const briefed = (lastBriefing, today) => lastBriefing === today;

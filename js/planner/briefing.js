@@ -15,12 +15,7 @@ import {
   sheetEl, openSheet, closeSheet, refresh, ICON_CHECK,
 } from '../core/ui.js';
 import { appliesOnDate, goalsDueOn, todayOrder } from './planner.js';
-
-const PRIORITIES = [
-  { value: 1, label: 'High' },
-  { value: 2, label: 'Normal' },
-  { value: 3, label: 'Low' },
-];
+import { QUADRANTS, quadrant, matrixKeyHtml, DEFAULT_QUADRANT } from './priority.js';
 
 /** Has the briefing already been shown today? */
 export function alreadyBriefed(today = todayStr()) {
@@ -71,7 +66,7 @@ export function openBriefing(today = todayStr()) {
 
       <div class="brief-sort">
         <button class="brief-sort-btn ${mode === 'time' ? 'is-on' : ''}" data-sort="time" type="button">By time</button>
-        <button class="brief-sort-btn ${mode === 'priority' ? 'is-on' : ''}" data-sort="priority" type="button">By priority</button>
+        <button class="brief-sort-btn ${mode === 'priority' ? 'is-on' : ''}" data-sort="priority" type="button">By matrix</button>
       </div>
 
       <div class="group brief-list">
@@ -80,9 +75,11 @@ export function openBriefing(today = todayStr()) {
           : '<div class="empty-note">Nothing scheduled today.</div>'}
       </div>
 
+      ${mode === 'priority' ? matrixKeyHtml() : ''}
+
       <p class="sheet-hint">${mode === 'priority'
-        ? 'Set a priority on each one. Today will keep this order.'
-        : 'Sorted by the clock. Switch to priority to order them yourself.'}</p>
+        ? 'Place each one in the matrix. Today will keep this order.'
+        : 'Sorted by the clock. Switch to the matrix to order them yourself.'}</p>
 
       <div class="sheet-actions">
         <button class="sheet-save" id="briefDone" type="button">Start the day</button>
@@ -116,7 +113,7 @@ export function openBriefing(today = todayStr()) {
 
 function rowHtml(x, today) {
   const done = x.recurring && x.recurring !== 'none' ? x.lastCompletedDate === today : x.completed;
-  const prio = Number(x.priority) || 2;
+  const prio = Number(x.priority) || DEFAULT_QUADRANT;
   return `<div class="row brief-row">
       <div class="row-body">
         <div class="row-title ${done ? 'done' : ''}">${x.flagged ? '&#128681; ' : ''}${escapeHtml(x.title)}</div>
@@ -127,8 +124,9 @@ function rowHtml(x, today) {
           ${done ? `<span class="meta-chip">${ICON_CHECK}</span>` : ''}
         </div>
         <div class="prio-row">
-          ${PRIORITIES.map(p => `<button class="prio-btn p${p.value} ${prio === p.value ? 'is-on' : ''}"
-            data-prio="${x.id}" data-value="${p.value}" type="button">${p.label}</button>`).join('')}
+          ${QUADRANTS.map(q => `<button class="prio-btn ${prio === q.value ? 'is-on' : ''}"
+            style="--q:${q.colour}" data-prio="${x.id}" data-value="${q.value}"
+            title="${q.hint}" type="button">${q.label}</button>`).join('')}
         </div>
       </div>
     </div>`;

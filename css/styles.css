@@ -616,9 +616,20 @@ mark { background: rgba(10,132,255,0.3); color: inherit; border-radius: 3px; pad
   background: var(--bg-elevated-3); color: var(--label-secondary);
   font-size: 11.5px; font-weight: 700; cursor: pointer;
 }
-.prio-btn.p1.is-on { background: var(--sys-red); color: #fff; }
-.prio-btn.p2.is-on { background: var(--sys-blue); color: #fff; }
-.prio-btn.p3.is-on { background: var(--bg-elevated-2); color: var(--label-tertiary); }
+.prio-btn.is-on { background: var(--q); color: #fff; }
+.meta-chip.quad { background: color-mix(in srgb, var(--q) 22%, transparent); color: var(--q); font-weight: 700; }
 
-.meta-chip.prio-high { background: rgba(255,69,58,0.2); color: var(--sys-red); font-weight: 700; }
-.meta-chip.prio-low { background: var(--bg-elevated-2); color: var(--label-tertiary); }
+/* the 2x2 key, drawn the way the matrix is normally drawn */
+.matrix-key { margin: 4px 0 12px; }
+.mx-head, .mx-row { display: grid; grid-template-columns: 52px 1fr 1fr; gap: 6px; align-items: center; }
+.mx-head { margin-bottom: 5px; }
+.mx-head span { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--label-tertiary); text-align: center; }
+.mx-row { margin-bottom: 6px; }
+.mx-side { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--label-tertiary); }
+.mx-cell {
+  background: color-mix(in srgb, var(--q) 20%, transparent);
+  border-left: 3px solid var(--q);
+  border-radius: var(--r-sm); padding: 7px 9px; min-width: 0;
+}
+.mx-label { display: block; font-size: 12.5px; font-weight: 700; color: var(--q); }
+.mx-hint { display: block; font-size: 10px; color: var(--label-tertiary); margin-top: 1px; }
