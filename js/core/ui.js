@@ -222,11 +222,26 @@ function sheetScale(el) {
   return m ? parseFloat(m[1]) : 0.92;
 }
 
+// Whether a sheet is already up. Redrawing its contents - ticking something
+// off inside it, say - must not replay the opening spring, or the panel jumps
+// back to 92% and bounces every time.
+let sheetIsOpen = false;
+
+export function isSheetOpen() { return sheetIsOpen; }
+
 export function openSheet() {
   const scrim = $('scrim');
   const sheet = $('sheet');
   scrim.style.pointerEvents = 'auto';
   sheet.style.pointerEvents = 'auto';
+
+  if (sheetIsOpen) {
+    sheet.style.opacity = 1;
+    sheet.style.transform = 'translate(-50%, -50%) scale(1)';
+    return;
+  }
+  sheetIsOpen = true;
+
   animateOpacity(scrim, 1, 220);
   animateOpacity(sheet, 1, 180);
   const s = new Spring(0.92, { dampingRatio: 0.84, response: 0.3 });
@@ -237,6 +252,7 @@ export function openSheet() {
 export function closeSheet() {
   const scrim = $('scrim');
   const sheet = $('sheet');
+  sheetIsOpen = false;
   const s = new Spring(sheetScale(sheet), { dampingRatio: 1, response: 0.22 });
   s.set(0.92);
   runSpring(s,

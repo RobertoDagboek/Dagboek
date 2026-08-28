@@ -45,6 +45,7 @@ let filling = false;
 let quote = null;
 let entryDates = new Set();   // every date that has an entry, for the month dots
 let editorFor = null;         // which date the editor on screen belongs to
+let loadRun = 0;              // bumped per load, so a stale one can bow out
 let viewerUrl = null;
 
 export function setDiarySession(session) { state.session = session; }
@@ -181,7 +182,7 @@ async function renderEditor(seedText) {
   wireEditor();
   editorFor = state.date;
   await loadDate(state.date);
-  if (seedText) appendToTopic(state.topic, seedText);
+  if (seedText && $('sections')) appendToTopic(state.topic, seedText);
 }
 
 function wireEditor() {
@@ -213,13 +214,15 @@ function wireEditor() {
 async function gotoDate(date) {
   if (!date) return;
   state.date = date;
-  $('dDate').value = date;
+  const field = $('dDate');
+  if (field) field.value = date;
   await loadDate(date);
   document.dispatchEvent(new CustomEvent('app:subtitle'));
 }
 
 async function loadDate(date) {
   editorFor = date;
+  const run = ++loadRun;
   state.audio = null; state.loc = null; state.entry = null; state.media = []; state.tags = [];
   renderAudio();
   try {
@@ -228,13 +231,22 @@ async function loadDate(date) {
     state.media = row?.entry_photos ?? [];
     state.tags = row?.tags ?? [];
     if (row?.lat != null && row?.lng != null) state.loc = { lat: row.lat, lng: row.lng, place: row.place };
-  } catch (e) { toast(e.message); }
+  } catch (e) {
+    if (run === loadRun) toast(e.message);
+  }
+
+  // Fetching takes a moment, and in that moment the screen may have been
+  // swapped for the calendar, or a different day asked for. Writing into a
+  // page that is no longer there used to throw on the first missing element
+  // and abandon everything after it.
+  if (run !== loadRun || !$('sections')) return;
 
   const sections = { ...(state.entry?.sections ?? {}) };
   const legacy = state.entry?.text?.trim();
   if (legacy && !Object.keys(sections).length) sections.ander = legacy;
   fillSections(sections);
-  $('btnDelete').hidden = !state.entry;
+  const del = $('btnDelete');
+  if (del) del.hidden = !state.entry;
   renderLocation();
   renderTags();
   renderMedia();

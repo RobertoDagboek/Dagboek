@@ -8,7 +8,7 @@ import {
   settings, saveSettings, hasProject,
   getLock, setLock, hasLock, clearLock,
   failedTries, bumpFailedTries, resetFailedTries, MAX_PIN_TRIES,
-  getSecretBox, setSecretBox,
+  getSecretBox, setSecretBox, getLegacySecretBox, clearLegacySecretBox,
   setOpenAIKey, openAIKey, takeLegacyPlainKey,
 } from './core/config.js';
 import {
@@ -408,8 +408,7 @@ async function pinSubmit() {
     cryptoKey = localKey;
     livePin = value;
     resetFailedTries();
-    const box = getSecretBox();
-    setOpenAIKey(box ? await decryptWith(localKey, box) : '');
+    setOpenAIKey(await recoverKey(localKey));
     pin.busy = false;
     await enterApp();
   } catch {
@@ -464,11 +463,8 @@ async function finishLogin(username, value, { creating }) {
     setLock({ v: 2, user: username, len: value.length, check: await makeCheck(localKey) });
     resetFailedTries();
 
-    const existing = openAIKey() || takeLegacyPlainKey();
-    const box = getSecretBox();
-    let apiKey = existing;
-    if (!apiKey && box) { try { apiKey = await decryptWith(localKey, box); } catch { apiKey = ''; } }
-    setSecretBox(apiKey ? await encryptWith(localKey, apiKey) : null);
+    const apiKey = openAIKey() || takeLegacyPlainKey() || await recoverKey(localKey);
+    if (apiKey) setSecretBox(await encryptWith(localKey, apiKey));
     setOpenAIKey(apiKey);
 
     pin.busy = false;
@@ -479,6 +475,31 @@ async function finishLogin(username, value, { creating }) {
     $('pin-msg').textContent = loginError(e, creating);
     renderPin();
   }
+}
+
+/**
+ * Get this account's OpenAI key back, if it has one. Tries its own slot first,
+ * then the old shared slot - but only claims that one if this PIN actually
+ * opens it, so a second person signing in on the same phone cannot take it,
+ * and cannot wipe it either.
+ */
+async function recoverKey(localKey) {
+  const own = getSecretBox();
+  if (own) {
+    try { return await decryptWith(localKey, own); } catch { /* not ours after all */ }
+  }
+  const legacy = getLegacySecretBox();
+  if (legacy) {
+    try {
+      const key = await decryptWith(localKey, legacy);
+      if (key) {
+        setSecretBox(await encryptWith(localKey, key));
+        clearLegacySecretBox();
+        return key;
+      }
+    } catch { /* belongs to the other account on this device */ }
+  }
+  return '';
 }
 
 function loginError(e, creating) {

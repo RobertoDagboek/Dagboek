@@ -14,7 +14,8 @@ export const BUILT_IN = {
 
 const KEY = 'dagboek.settings.v1';
 const LOCK_KEY = 'dagboek.lock.v1';
-const SECRET_KEY = 'dagboek.secret.v1';
+const SECRET_LEGACY = 'dagboek.secret.v1';   // before accounts were kept apart
+const SECRET_PREFIX = 'dagboek.secret.';
 const FAIL_KEY = 'dagboek.fails.v1';
 
 export const MAX_PIN_TRIES = 8;
@@ -71,9 +72,10 @@ export function hasLock() {
 }
 
 /** Wipe the PIN and the encrypted key from this device. Diary data is untouched. */
+/** Wipe this device's PIN. Only this account's key goes with it. */
 export function clearLock() {
   localStorage.removeItem(LOCK_KEY);
-  localStorage.removeItem(SECRET_KEY);
+  localStorage.removeItem(secretSlot());
   localStorage.removeItem(FAIL_KEY);
 }
 
@@ -93,13 +95,37 @@ export function resetFailedTries() {
 
 /* ------------------- the OpenAI key, encrypted at rest ------------------ */
 
-export function getSecretBox() {
-  try { return JSON.parse(localStorage.getItem(SECRET_KEY) || 'null'); } catch { return null; }
+/**
+ * The OpenAI key belongs to one account, not to the browser. Two people
+ * sharing a phone used to share one slot: the second to sign in could not
+ * decrypt the first one's key, and stored an empty box over it - quietly
+ * destroying it.
+ */
+function secretSlot(slug) {
+  const who = slug || settings().slug || settings().username;
+  return who ? SECRET_PREFIX + who : SECRET_LEGACY;
 }
 
-export function setSecretBox(box) {
-  if (box) localStorage.setItem(SECRET_KEY, JSON.stringify(box));
-  else localStorage.removeItem(SECRET_KEY);
+export function getSecretBox(slug) {
+  try { return JSON.parse(localStorage.getItem(secretSlot(slug)) || 'null'); } catch { return null; }
+}
+
+/**
+ * The single shared slot used before accounts were kept apart. It is never
+ * moved on sight: whoever signs in first is not necessarily whose key it is,
+ * and handing it over would give one person another's billing. It is claimed
+ * only once it has actually been decrypted - see takeLegacySecret().
+ */
+export function getLegacySecretBox() {
+  try { return JSON.parse(localStorage.getItem(SECRET_LEGACY) || 'null'); } catch { return null; }
+}
+
+export function clearLegacySecretBox() { localStorage.removeItem(SECRET_LEGACY); }
+
+export function setSecretBox(box, slug) {
+  const slot = secretSlot(slug);
+  if (box) localStorage.setItem(slot, JSON.stringify(box));
+  else localStorage.removeItem(slot);
 }
 
 // Held in memory only, for as long as the tab is open and unlocked.
