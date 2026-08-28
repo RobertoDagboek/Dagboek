@@ -420,6 +420,7 @@ function renderMonthGridHtml() {
     ${CONTEXTS.map(c => `<span class="mleg-item"><span class="mleg-dot" style="background:${CONTEXT_COLORS[c]}"></span>${c}</span>`).join('')}
     <span class="mleg-item"><span class="mc-diary"></span>Diary</span>
     <span class="mleg-item"><span class="mleg-flag">&#9873;</span>Goal due</span>
+    <span class="mleg-item"><span class="mc-done">&#10003;</span>Something done</span>
   </div>`;
 
   html += `<div class="month-dow-row">${dowLabels('short').map(d => `<div class="month-dow">${d}</div>`).join('')}</div>`;
@@ -432,7 +433,11 @@ function renderMonthGridHtml() {
       const d = cursor;
       const inMonth = parseDateStr(d).getMonth() === month;
       const dayItems = items.filter(x => x.kind === 'task' && appliesOnDate(x, d) && matchesContext(x));
-      const ctxs = [...new Set(dayItems.map(x => x.context).filter(Boolean))];
+      // Dots stand for work still outstanding, so a day that is finished shows
+      // the tick alone rather than a tick beside dots that are no longer true.
+      const outstanding = dayItems.filter(x => !isDoneOnDate(x, d));
+      const anyDone = outstanding.length < dayItems.length;
+      const ctxs = [...new Set(outstanding.map(x => x.context).filter(Boolean))];
       const hasDiary = diaryDays.has(d);
       const dueGoals = goalsDueOn(d);
       const openGoal = dueGoals.some(g => !g.finished);
@@ -441,8 +446,9 @@ function renderMonthGridHtml() {
         <span class="mc-num">${dayNum(d)}</span>
         ${(dayItems.length || hasDiary) ? `<span class="mc-dots">
           ${ctxs.slice(0, 3).map(c => `<span class="mc-dot" style="background:${CONTEXT_COLORS[c] || 'var(--sys-gray)'}"></span>`).join('')}
+          ${anyDone ? '<span class="mc-done">&#10003;</span>' : ''}
           ${hasDiary ? '<span class="mc-diary"></span>' : ''}
-          ${dayItems.length ? `<span class="mc-count">${dayItems.length}</span>` : ''}
+          ${outstanding.length ? `<span class="mc-count">${outstanding.length}</span>` : ''}
         </span>` : ''}
       </button>`;
       cursor = addDays(cursor, 1);
