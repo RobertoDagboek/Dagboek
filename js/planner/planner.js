@@ -45,8 +45,19 @@ export function appliesOnDate(t2, dateStr) {
   if (t2.recurring === 'weekly' && t2.date) return parseDateStr(dateStr).getDay() === parseDateStr(t2.date).getDay();
   return t2.date === dateStr;
 }
-function isDoneOnDate(t2, dateStr) {
-  if (t2.recurring && t2.recurring !== 'none') return t2.lastCompletedDate === dateStr;
+/**
+ * Was this done on that particular day?
+ *
+ * A repeating task is finished separately on each day it comes round, so it
+ * keeps a set of dates. It used to keep only the most recent one, which meant
+ * ticking it on Tuesday silently un-ticked Monday.
+ */
+export function isDoneOnDate(t2, dateStr) {
+  if (t2.recurring && t2.recurring !== 'none') {
+    if (Array.isArray(t2.doneDates) && t2.doneDates.includes(dateStr)) return true;
+    // Tasks last ticked before migration 012 still only have the single date.
+    return !t2.doneDates?.length && t2.lastCompletedDate === dateStr;
+  }
   return !!t2.completed;
 }
 function isCarried(t2) { return t2.kind === 'task' && t2.recurring === 'none' && t2.date && t2.date < TODAY() && !t2.completed; }
@@ -240,7 +251,12 @@ function toggleCompleteOn(id, dateStr) {
   const x = items.find(i => i.id === id);
   if (!x) return;
   if (x.recurring && x.recurring !== 'none') {
-    x.lastCompletedDate = (x.lastCompletedDate === dateStr) ? null : dateStr;
+    const days = new Set(x.doneDates ?? []);
+    // Fold in a pre-012 tick so it is not lost the first time this is touched.
+    if (x.lastCompletedDate) days.add(x.lastCompletedDate);
+    if (days.has(dateStr)) days.delete(dateStr); else days.add(dateStr);
+    x.doneDates = [...days].sort();
+    x.lastCompletedDate = x.doneDates.length ? x.doneDates[x.doneDates.length - 1] : null;
   } else {
     x.completed = !x.completed;
   }
@@ -683,7 +699,7 @@ function inboxRowHtml(x) {
 
 function newTask(over = {}) {
   return {
-    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none', repeatDays: [], priority: DEFAULT_QUADRANT,
+    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none', repeatDays: [], doneDates: [], priority: DEFAULT_QUADRANT,
     flagged: false, context: '', completed: false, lastCompletedDate: null, goalId: null,
     startedDate: '', lastTouchedDate: '', deadline: '', finished: false, finishedDate: null,
     order: Date.now(), createdAt: Date.now(), ...over,

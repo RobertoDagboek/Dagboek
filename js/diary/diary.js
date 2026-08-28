@@ -568,7 +568,7 @@ function catchReminders(text) {
     items.push({
       id: uid(), kind: 'task', title: r.subject, notes: '', estimate: '',
       date: r.date || '', time: '', recurring: 'none', repeatDays: [],
-      flagged: false, context: '', completed: false, lastCompletedDate: null,
+      flagged: false, context: '', completed: false, lastCompletedDate: null, doneDates: [],
       goalId: null, startedDate: '', lastTouchedDate: '', deadline: '',
       finished: false, finishedDate: null,
       draft: true, source: 'diary', heard: r.heard,

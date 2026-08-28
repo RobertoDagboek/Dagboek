@@ -10,7 +10,9 @@
  */
 
 function todayOrder(today, mode) {
-  const isDone = x => (x.recurring && x.recurring !== 'none' ? x.lastCompletedDate === today : x.completed);
+  const isDone = x => (x.recurring && x.recurring !== 'none'
+    ? (x.doneDates ?? []).includes(today) || (!x.doneDates?.length && x.lastCompletedDate === today)
+    : x.completed);
   return (a, b) => {
     const ad = isDone(a), bd = isDone(b);
     if (ad !== bd) return ad ? 1 : -1;

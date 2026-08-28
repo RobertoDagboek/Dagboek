@@ -14,7 +14,7 @@ import {
   $, escapeHtml, todayStr, fmtDateFull, fmtTime,
   sheetEl, openSheet, closeSheet, refresh, ICON_CHECK,
 } from '../core/ui.js';
-import { appliesOnDate, goalsDueOn, todayOrder } from './planner.js';
+import { appliesOnDate, goalsDueOn, todayOrder, isDoneOnDate } from './planner.js';
 import { QUADRANTS, quadrant, matrixKeyHtml, DEFAULT_QUADRANT } from './priority.js';
 
 /** Has the briefing already been shown today? */
@@ -52,7 +52,7 @@ export function openBriefing(today = todayStr()) {
   const draw = () => {
     const todays = todaysTasks(today).sort(todayOrder(today, mode));
     const dueGoals = goalsDueOn(today).filter(g => !g.finished);
-    const done = todays.filter(x => x.completed || x.lastCompletedDate === today).length;
+    const done = todays.filter(x => isDoneOnDate(x, today)).length;
 
     sheetEl().innerHTML = `
       <div class="sheet-handle"></div>
@@ -112,7 +112,7 @@ export function openBriefing(today = todayStr()) {
 }
 
 function rowHtml(x, today) {
-  const done = x.recurring && x.recurring !== 'none' ? x.lastCompletedDate === today : x.completed;
+  const done = isDoneOnDate(x, today);
   const prio = Number(x.priority) || DEFAULT_QUADRANT;
   return `<div class="row brief-row">
       <div class="row-body">
