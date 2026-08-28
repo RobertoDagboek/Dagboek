@@ -700,7 +700,7 @@ let capArea = null;
 
 const CAP_AREAS = () => [
   { id: 'today', label: '☀️ Today' },
-  { id: 'week', label: '📅 This week' },
+  { id: 'week', label: '📅 Schedule' },
   { id: 'ongoing', label: '⚡ Ongoing' },
   { id: 'goal', label: '🚩 Goal' },
   { id: 'inbox', label: '📥 Inbox' },
@@ -765,7 +765,10 @@ function capExtraHtml() {
     <div id="capDaysWrap" hidden>${dayTogglesHtml('capDays', [])}</div>`;
 
   if (capArea === 'today') return `<div class="cap-extra-group">${commons}</div>`;
-  if (capArea === 'week') return `<div class="cap-extra-group">${dateStripWrapHtml('capWeekDay')}${commons}</div>`;
+  if (capArea === 'week') {
+    return `<div class="cap-extra-group">${dateStripWrapHtml('capWeekDay')}${commons}
+      <div class="cap-extra-note">Pick the day it belongs on. Defaults to tomorrow.</div></div>`;
+  }
   if (capArea === 'goal') return `<div class="cap-extra-group">${dateStripWrapHtml('capDeadline')}</div>`;
   if (capArea === 'ongoing') {
     return `<div class="cap-extra-group">
