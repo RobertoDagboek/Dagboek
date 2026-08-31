@@ -16,6 +16,7 @@ import {
 } from '../core/ui.js';
 import { appliesOnDate, goalsDueOn, todayOrder, isDoneOnDate } from './planner.js';
 import { QUADRANTS, quadrant, matrixKeyHtml, DEFAULT_QUADRANT } from './priority.js';
+import { syncPrefs } from '../core/push.js';
 
 /** Has the briefing already been shown today? */
 export function alreadyBriefed(today = todayStr()) {
@@ -50,9 +51,11 @@ export function openBriefing(today = todayStr()) {
   let mode = settings().todaySort === 'priority' ? 'priority' : 'time';
 
   const draw = () => {
-    const todays = todaysTasks(today).sort(todayOrder(today, mode));
+    const all = todaysTasks(today).sort(todayOrder(today, mode));
+    const todays = all.filter(x => !isDoneOnDate(x, today));
+    const finished = all.filter(x => isDoneOnDate(x, today));
     const dueGoals = goalsDueOn(today).filter(g => !g.finished);
-    const done = todays.filter(x => isDoneOnDate(x, today)).length;
+    const done = finished.length;
 
     sheetEl().innerHTML = `
       <div class="sheet-handle"></div>
@@ -74,8 +77,19 @@ export function openBriefing(today = todayStr()) {
       <div class="group brief-list">
         ${todays.length
           ? todays.map(x => rowHtml(x, today)).join('')
-          : '<div class="empty-note">Nothing scheduled today.</div>'}
+          : '<div class="empty-note">Nothing left today.</div>'}
       </div>
+
+      ${finished.length ? `<div class="done-drop">
+        <button class="done-head" id="doneHead" type="button">
+          <span class="done-chev">&rsaquo;</span>
+          <span>Done today</span>
+          <span class="done-count">${finished.length}</span>
+        </button>
+        <div class="group done-list" id="doneList" hidden>
+          ${finished.map(x => rowHtml(x, today)).join('')}
+        </div>
+      </div>` : ''}
 
       <p class="sheet-hint">${mode === 'priority'
         ? 'Place each one in the matrix. Today will keep this order.'
@@ -88,6 +102,7 @@ export function openBriefing(today = todayStr()) {
     sheetEl().querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', e => {
       mode = e.currentTarget.getAttribute('data-sort');
       saveSettings({ todaySort: mode });
+      syncPrefs({ todaySort: mode, lastBriefing: settings().lastBriefing });
       draw();
     }));
 
@@ -100,8 +115,15 @@ export function openBriefing(today = todayStr()) {
       draw();
     }));
 
+    $('doneHead')?.addEventListener('click', () => {
+      const list = $('doneList');
+      list.hidden = !list.hidden;
+      $('doneHead').classList.toggle('is-open', !list.hidden);
+    });
+
     $('briefDone').addEventListener('click', () => {
       saveSettings({ lastBriefing: today, todaySort: mode });
+      syncPrefs({ todaySort: mode, lastBriefing: today });
       closeSheet();
       refresh();
     });
@@ -123,11 +145,11 @@ function rowHtml(x, today) {
           ${x.estimate ? `<span class="meta-chip">&#9201; ${escapeHtml(x.estimate)}</span>` : ''}
           ${done ? `<span class="meta-chip">${ICON_CHECK}</span>` : ''}
         </div>
-        <div class="prio-row">
+        ${done ? '' : `<div class="prio-row">
           ${QUADRANTS.map(q => `<button class="prio-btn ${prio === q.value ? 'is-on' : ''}"
             style="--q:${q.colour}" data-prio="${x.id}" data-value="${q.value}"
             title="${q.hint}" type="button">${q.label}</button>`).join('')}
-        </div>
+        </div>`}
       </div>
     </div>`;
 }

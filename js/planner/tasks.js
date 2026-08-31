@@ -21,7 +21,7 @@ let saved = new Map();
 
 const COLUMNS = 'id, kind, title, notes, estimate, entry_date, at_time, recurring, flagged, context, '
   + 'completed, last_done, goal_id, started_date, touched_date, deadline, finished, '
-  + 'finished_date, sort_order, created_at, repeat_days, draft, source, heard, priority, done_dates';
+  + 'finished_date, sort_order, created_at, repeat_days, draft, source, heard, priority, done_dates, time_locked';
 
 const orNull = v => (v === '' || v === undefined ? null : v);
 
@@ -39,6 +39,7 @@ function toRow(t) {
     repeat_days: (t.repeatDays?.length ? t.repeatDays : null),
     flagged: !!t.flagged,
     priority: Number(t.priority) || 2,
+    time_locked: !!t.timeLocked,
     context: orNull(t.context),
     completed: !!t.completed,
     last_done: orNull(t.lastCompletedDate),
@@ -71,6 +72,7 @@ function fromRow(r) {
     repeatDays: r.repeat_days ?? [],
     flagged: !!r.flagged,
     priority: Number(r.priority) || 2,
+    timeLocked: !!r.time_locked,
     context: r.context ?? '',
     completed: !!r.completed,
     lastCompletedDate: r.last_done ?? null,

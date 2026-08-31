@@ -17,6 +17,7 @@ import {
 } from './core/crypto.js';
 import * as db from './core/supa.js';
 import * as bio from './core/biometric.js';
+import * as push from './core/push.js';
 import { loadItems } from './planner/tasks.js';
 import {
   $, ICON_PLUS, ICON_TODAY, ICON_WEEK, ICON_GOALS, ICON_INBOX, ICON_DIARY,
@@ -39,6 +40,7 @@ let session = null;
 let cryptoKey = null;
 let pin = { mode: 'unlock', buffer: '', first: '', newUser: '', busy: false };
 let today = todayStr();
+let pendingOpen = null;   // a notification tapped before the app was unlocked
 // Held only while unlocked, so Face ID can be switched on without retyping.
 let livePin = null;
 
@@ -77,6 +79,13 @@ const TABS = [
 
 async function boot() {
   wireChrome();
+  // Opened by tapping a notification: remember where it pointed until the
+  // PIN is out of the way.
+  const q = location.search || '';
+  if (q.includes('task=') || q.includes('briefing=')) {
+    pendingOpen = location.href;
+    history.replaceState?.(null, '', location.pathname);
+  }
 
   if (!hasProject()) {
     $('pin-msg').textContent = 'Supabase is not configured.';
@@ -111,6 +120,10 @@ async function enterApp() {
     toast(e.message);
   }
   renderAll();
+  // Opening the app answers whatever notification was outstanding.
+  push.markSeen();
+  if (pendingOpen) { const u = pendingOpen; pendingOpen = null; setTimeout(() => openFromUrl(u), 400); }
+  push.syncPrefs({ todaySort: settings().todaySort, lastBriefing: settings().lastBriefing });
   // First open of the day only. Never on a refresh, never twice.
   maybeBrief(today);
 
@@ -137,6 +150,9 @@ function wireChrome() {
 
   document.addEventListener('app:refresh', renderAll);
   document.addEventListener('app:badges', renderTabBar);
+  navigator.serviceWorker?.addEventListener('message', e => {
+    if (e.data?.type === 'notification') openFromUrl(e.data.url);
+  });
   document.addEventListener('app:subtitle', renderHeader);
   document.addEventListener('app:goto', e => {
     const { screen: target, seed } = e.detail || {};
@@ -548,6 +564,12 @@ function openSettings() {
     <textarea id="setVocab" class="sheet-notes" placeholder="Riebeeck-Kasteel, oupa Hennie, bakkie">${s.vocab}</textarea>
     <p class="sheet-hint">Names of people, places and words you use often, comma separated. This helps a lot with accents and proper nouns.</p>
 
+    <div class="field-group" id="notifyGroup" hidden>
+      <div class="toggle-row"><span class="fname">Notifications</span>
+        <button class="ios-switch" id="notifyToggle" type="button"><span class="thumb"></span></button></div>
+    </div>
+    <p class="sheet-hint" id="notifyHint"></p>
+
     <div class="field-group" id="bioGroup" hidden>
       <div class="toggle-row"><span class="fname">Unlock with Face ID</span>
         <button class="ios-switch" id="bioToggle" type="button"><span class="thumb"></span></button></div>
@@ -582,6 +604,7 @@ function openSettings() {
       closeSheet();
     } catch (e) { toast(e.message); }
   });
+  wireNotifyToggle();
   wireBiometricToggle();
   $('btnRename').addEventListener('click', renameAccount);
   $('btnChangePin').addEventListener('click', () => { closeSheet(); startLogin({ mode: 'change' }); });
@@ -590,6 +613,47 @@ function openSettings() {
   $('btnSignout').addEventListener('click', async () => { await db.signOut(); location.reload(); });
 
   openSheet();
+}
+
+/** A notification was tapped: go where it points. */
+function openFromUrl(url) {
+  try {
+    const q = new URL(url, location.href).searchParams;
+    if (q.get('briefing')) { openBriefing(today); return; }
+    const id = q.get('task');
+    if (id) { switchScreen('today'); openPlannerEditor(id); return; }
+    switchScreen('today');
+  } catch { switchScreen('today'); }
+}
+
+async function wireNotifyToggle() {
+  const group = $('notifyGroup');
+  const toggle = $('notifyToggle');
+  const hint = $('notifyHint');
+  if (!group) return;
+
+  const paint = async () => {
+    const st = await push.status();
+    group.hidden = st === 'unsupported';
+    toggle.classList.toggle('on', st === 'on');
+    hint.textContent = {
+      'unsupported': 'This browser cannot do notifications.',
+      'needs-install': 'Add Dagboek to your Home Screen first — iPhone only allows notifications for installed apps.',
+      'blocked': 'Notifications are blocked in your phone settings. Turn them back on there first.',
+      'off': 'A nudge at 06:30, then every two hours. Timed tasks alert at their time.',
+      'on': 'On for this device. 06:30, then every two hours to 20:00, and a last call at 21:00.',
+    }[st] || '';
+  };
+  await paint();
+
+  toggle.onclick = async () => {
+    const st = await push.status();
+    if (st === 'on') { await push.disable(); await paint(); return; }
+    if (st !== 'off') { await paint(); return; }
+    try { await push.enable(); toast('Notifications on'); }
+    catch (e) { hint.textContent = e.message; }
+    await paint();
+  };
 }
 
 async function wireBiometricToggle() {

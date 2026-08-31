@@ -30,6 +30,7 @@ const DEFAULTS = {
   slug: '',             // permanent account id the credentials derive from
   todaySort: 'time',    // 'time' or 'priority' - chosen in the daily briefing
   lastBriefing: '',     // the day the briefing was last shown
+  notifyAsked: false,   // whether we have offered notifications once
 };
 
 let cache = null;

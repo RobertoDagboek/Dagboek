@@ -214,6 +214,7 @@ function taskRowHtml(x, dateStr) {
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
   if (x.context) meta.push(`<span class="meta-chip">${escapeHtml(x.context)}</span>`);
   if (x.estimate) meta.push(`<span class="meta-chip">&#9201; ${escapeHtml(x.estimate)}</span>`);
+  if (x.timeLocked && x.time) meta.push('<span class="meta-chip locked">&#9200; fixed</span>');
   const q = quadrant(x.priority);
   if (q.value !== DEFAULT_QUADRANT) {
     meta.push(`<span class="meta-chip quad" style="--q:${q.colour}">${q.label}</span>`);
@@ -699,7 +700,7 @@ function inboxRowHtml(x) {
 
 function newTask(over = {}) {
   return {
-    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none', repeatDays: [], doneDates: [], priority: DEFAULT_QUADRANT,
+    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none', repeatDays: [], doneDates: [], priority: DEFAULT_QUADRANT, timeLocked: false,
     flagged: false, context: '', completed: false, lastCompletedDate: null, goalId: null,
     startedDate: '', lastTouchedDate: '', deadline: '', finished: false, finishedDate: null,
     order: Date.now(), createdAt: Date.now(), ...over,
@@ -897,7 +898,10 @@ function editorHtml(x) {
       <div class="field-group">
         <div class="field-row"><span class="fname">Started</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.startedDate)}</span></div>
         <div class="field-row"><span class="fname">Last touched</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.lastTouchedDate || x.startedDate)}</span></div>
-        <div class="field-row"><span class="fname">Estimate</span>${estimatePickerContainerHtml('editEstimate', x.estimate || '')}</div>
+        <div class="toggle-row"><span class="fname">Alert me at this time</span>
+        <button class="ios-switch ${x.timeLocked ? 'on' : ''}" id="editTimeLock" type="button"><span class="thumb"></span></button></div>
+      <p class="sheet-hint" style="margin:-2px 2px 10px;">Fires at its time even when the day is sorted by matrix.</p>
+      <div class="field-row"><span class="fname">Estimate</span>${estimatePickerContainerHtml('editEstimate', x.estimate || '')}</div>
       </div>
       ${actions}`;
   }
@@ -957,6 +961,7 @@ function wireEditor(x) {
     $('moveTomBtn').addEventListener('click', () => { $('editDate').value = addDays(TODAY(), 1); });
     $('moveNoneBtn').addEventListener('click', () => { $('editDate').value = ''; });
     wireTimePicker('editTime', '🕐 Time');
+    $('editTimeLock')?.addEventListener('click', e => e.currentTarget.classList.toggle('on'));
     wireEstimatePicker('editEstimate');
     $('editPrio')?.querySelectorAll('[data-value]').forEach(b => b.addEventListener('click', e => {
       $('editPrio').querySelectorAll('[data-value]').forEach(o => o.classList.remove('is-on'));
@@ -989,6 +994,7 @@ function wireEditor(x) {
       x.repeatDays = x.recurring === 'days' ? getDayToggles('editDays') : [];
       const picked = $('editPrio')?.querySelector('[data-value].is-on');
       x.priority = picked ? Number(picked.getAttribute('data-value')) : DEFAULT_QUADRANT;
+      x.timeLocked = !!$('editTimeLock')?.classList.contains('on');
       x.context = $('editContext').value || '';
       x.flagged = $('editFlagToggle').dataset.on === '1';
     }

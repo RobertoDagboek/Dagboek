@@ -2,7 +2,7 @@
 // online, and the last-known copy when you are not. Cross-origin calls
 // (Supabase, OpenAI, the CDN) are never touched.
 
-const CACHE = 'dagboek-v21';
+const CACHE = 'dagboek-v23';
 const SHELL = [
   './',
   './index.html',
@@ -22,6 +22,8 @@ const SHELL = [
   './js/planner/tasks.js',
   './js/planner/briefing.js',
   './js/planner/priority.js',
+  './js/planner/schedule.js',
+  './js/core/push.js',
   './js/diary/diary.js',
   './js/diary/topics.js',
   './js/diary/quotes.js',
@@ -59,4 +61,43 @@ self.addEventListener('fetch', e => {
       })
       .catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html'))),
   );
+});
+
+/* ===================== Notifications ===================== */
+// A push arrives whether or not the app is open - this file is what runs.
+
+self.addEventListener('push', event => {
+  let d = {};
+  try { d = event.data ? event.data.json() : {}; } catch { d = {}; }
+  const title = d.title || 'Dagboek';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: d.body || '',
+    // The tag groups by kind, so a second nudge replaces the first rather than
+    // stacking up a column of them on the lock screen.
+    tag: d.tag || 'dagboek',
+    renotify: d.kind === 'task',
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    data: { url: d.url || './' },
+    // Buttons are ignored by Safari on iOS, so tapping the body has to be
+    // enough on its own - it opens straight to the task.
+    actions: d.kind === 'task' ? [{ action: 'open', title: 'Open' }] : [],
+  }));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = event.notification.data?.url || './';
+  event.waitUntil((async () => {
+    const all = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Reuse the window that is already open rather than piling up new ones.
+    for (const c of all) {
+      if (c.url.includes(self.registration.scope)) {
+        await c.focus();
+        c.postMessage({ type: 'notification', url });
+        return;
+      }
+    }
+    await clients.openWindow(url);
+  })());
 });
