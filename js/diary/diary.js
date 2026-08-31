@@ -4,7 +4,7 @@
 // video, location - rebuilt out of the planner's parts so it looks native to it.
 
 import { TOPICS, topicLabel, sectionsToText } from './topics.js';
-import { randomQuote } from './quotes.js';
+import { randomQuote, QUOTES } from './quotes.js';
 import { settings, openAIKey } from '../core/config.js';
 import * as db from '../core/supa.js';
 import { Recorder } from './recorder.js';
@@ -90,6 +90,7 @@ export function renderDiary(seedText) {
     <div class="quote-card" id="quoteCard">
       <p class="quote-text" id="quoteText">&ldquo;${escapeHtml(quote.t)}&rdquo;</p>
       <p class="quote-source" id="quoteSource">${escapeHtml(quote.s)}</p>
+      <p class="quote-count">Tap for another &middot; ${QUOTES.length} in rotation</p>
     </div>
 
     <div class="search-row">

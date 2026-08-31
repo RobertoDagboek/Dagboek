@@ -652,3 +652,5 @@ mark { background: rgba(10,132,255,0.3); color: inherit; border-radius: 3px; pad
   color: var(--sys-green); flex-shrink: 0;
 }
 .month-cell.is-today .mc-done { color: #fff; }
+
+.quote-count { margin: 6px 0 0; font-size: 11px; color: var(--label-tertiary); }
