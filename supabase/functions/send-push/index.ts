@@ -161,11 +161,20 @@ function key(kind, id, at) { return `${kind}:${id}:${at}`; }
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 
-webpush.setVapidDetails(
-  env('VAPID_SUBJECT') || 'mailto:dagboek@example.com',
-  env('VAPID_PUBLIC'),
-  env('VAPID_PRIVATE'),
-);
+// Configured on first use, not at boot. Doing it at boot meant that a missing
+// secret threw before the worker could serve anything at all, and the only
+// symptom was a 500 with nothing to go on.
+let vapidReady = false;
+function configureVapid() {
+  if (vapidReady) return;
+  const pub = env('VAPID_PUBLIC');
+  const priv = env('VAPID_PRIVATE');
+  if (!pub || !priv) {
+    throw new Error('VAPID_PUBLIC and VAPID_PRIVATE are not set in this function's secrets.');
+  }
+  webpush.setVapidDetails(env('VAPID_SUBJECT') || 'mailto:dagboek@example.com', pub, priv);
+  vapidReady = true;
+}
 
 const db = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), {
   auth: { persistSession: false },
@@ -187,6 +196,10 @@ Deno.serve(async (req) => {
   if (req.headers.get('x-cron-secret') !== env('CRON_SECRET')) {
     return new Response('nope', { status: 401 });
   }
+
+  // Say plainly what is missing rather than dying with a 500.
+  try { configureVapid(); }
+  catch (e) { return Response.json({ ok: false, error: (e as Error).message }, { status: 503 }); }
 
   const { data: states } = await db.from('notify_state').select('*').eq('enabled', true);
   let sent = 0;
