@@ -18,7 +18,10 @@ select cron.unschedule('dagboek-notify')
 select cron.schedule('dagboek-notify', '* * * * *', $$
   select net.http_post(
     url     := 'https://raufnpdvboljqeowulhy.supabase.co/functions/v1/send-push',
-    headers := '{"Content-Type":"application/json","x-cron-secret":"CRON_SECRET_HERE"}'::jsonb,
+    -- Supabase's gateway rejects any function call with no Authorization
+    -- header, before the function is ever reached. The anon key satisfies it;
+    -- x-cron-secret is what actually authorises the send.
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer ANON_KEY_HERE","x-cron-secret":"CRON_SECRET_HERE"}'::jsonb,
     body    := '{}'::jsonb
   );
 $$);
