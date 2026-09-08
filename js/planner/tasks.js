@@ -162,19 +162,42 @@ async function flush(onError) {
 
   if (!changed.length && !removed.length) return;
 
-  try {
-    if (changed.length) {
+  let stuck = false;
+
+  if (changed.length) {
+    try {
       const { error } = await supa().from(TABLE).upsert(changed.map(toRow), { onConflict: 'id' });
       if (error) throw error;
       for (const t of changed) saved.set(t.id, stamp(t));
+    } catch {
+      // A batched upsert can fail as a whole over just one row - e.g. a task
+      // whose sharing role changed since it was loaded, so this account can
+      // no longer write it. Left as-is, that one row would keep "changed"
+      // forever and drag every future save down with it, since it is
+      // re-included in every batch until something marks it saved. Retrying
+      // the rest one row at a time keeps everything else saving; only the
+      // genuinely stuck row(s) keep retrying (harmlessly) after this.
+      for (const t of changed) {
+        try {
+          const { error } = await supa().from(TABLE).upsert(toRow(t), { onConflict: 'id' });
+          if (error) throw error;
+          saved.set(t.id, stamp(t));
+        } catch {
+          stuck = true;
+        }
+      }
     }
-    if (removed.length) {
+  }
+
+  if (removed.length) {
+    try {
       const { error } = await supa().from(TABLE).delete().in('id', removed);
       if (error) throw error;
       for (const id of removed) saved.delete(id);
+    } catch {
+      stuck = true;
     }
-  } catch (e) {
-    // Leave `saved` untouched so the next save retries these same rows.
-    onError?.(e);
   }
+
+  if (stuck) onError?.(new Error('Could not save everything just now.'));
 }

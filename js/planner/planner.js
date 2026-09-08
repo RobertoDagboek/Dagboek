@@ -239,11 +239,15 @@ function wireOngoingRows(el) {
   el.querySelectorAll('[data-ongoingbody]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-ongoingbody'))));
   el.querySelectorAll('[data-log]').forEach(b => b.addEventListener('click', e => {
     const x = items.find(i => i.id === e.currentTarget.getAttribute('data-log'));
-    if (x && canEdit(x)) { x.lastTouchedDate = TODAY(); save(); refresh(); }
+    if (!x) return;
+    if (!canEdit(x)) { toast("View only — you can't change this."); return; }
+    x.lastTouchedDate = TODAY(); save(); refresh();
   }));
   el.querySelectorAll('[data-finish]').forEach(b => b.addEventListener('click', e => {
     const x = items.find(i => i.id === e.currentTarget.getAttribute('data-finish'));
-    if (x && canEdit(x)) { x.finished = true; x.finishedDate = TODAY(); save(); refresh(); }
+    if (!x) return;
+    if (!canEdit(x)) { toast("View only — you can't change this."); return; }
+    x.finished = true; x.finishedDate = TODAY(); save(); refresh();
   }));
 }
 
@@ -277,7 +281,7 @@ function taskRowHtml(x, dateStr) {
           ${x.notes ? `<div class="row-notes">${escapeHtml(x.notes)}</div>` : ''}
           ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
         </div>
-        <button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>
+        ${canDelete(x) ? `<button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>` : ''}
       </div>
     </div>`;
 }
@@ -373,7 +377,13 @@ function attachSwipe(slot, dateStr) {
       slot.removeEventListener('pointercancel', onUp);
       if (axis !== 'x') return;
       const projected = dx + project(vel);
-      if (projected < -width * 0.5) {
+      const swiped = items.find(i => i.id === id);
+      if (projected < -width * 0.5 && swiped && !canDelete(swiped)) {
+        // Would only be rejected and snapped back after playing the full
+        // fly-away animation - stop it before it starts instead.
+        toast('Only the owner can delete a shared task.');
+        settle();
+      } else if (projected < -width * 0.5) {
         const s = new Spring(dx, { dampingRatio: 1, response: 0.2 });
         s.velocity = vel; s.set(-width * 1.2);
         runSpring(s, v => {
@@ -607,7 +617,7 @@ function dayRowHtml(x, dateStr) {
         <div class="row-title ${done ? 'done' : ''}">${x.flagged ? '&#128681; ' : ''}${escapeHtml(x.title)}</div>
         ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
       </div>
-      <button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>
+      ${canDelete(x) ? `<button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>` : ''}
     </div>`;
 }
 
@@ -630,7 +640,9 @@ export function renderGoals() {
   el.querySelectorAll('[data-goaltitle]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-goaltitle'))));
   el.querySelectorAll('[data-goalcheck]').forEach(b => b.addEventListener('click', e => {
     const g = items.find(x => x.id === e.currentTarget.getAttribute('data-goalcheck'));
-    if (g && canEdit(g)) { g.finished = !g.finished; g.finishedDate = g.finished ? TODAY() : null; save(); refresh(); }
+    if (!g) return;
+    if (!canEdit(g)) { toast("View only — you can't change this."); return; }
+    g.finished = !g.finished; g.finishedDate = g.finished ? TODAY() : null; save(); refresh();
   }));
   el.querySelectorAll('[data-check]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation(); toggleCompleteOn(e.currentTarget.getAttribute('data-check'), TODAY());
@@ -782,8 +794,12 @@ async function respondInvite(inviteId, accept) {
     await respondToInvite(inviteId, accept);
     if (accept) { await loadItems(); refresh(); toast('Added to your planner.'); }
   } catch {
+    // The RPC may well have gone through server-side even though this
+    // request failed to come back - re-check both invites and items rather
+    // than assuming nothing happened, so an actually-accepted item doesn't
+    // sit invisible until the next full reload.
     toast('Could not answer that invite - try again.');
-    await loadInvites();
+    await Promise.all([loadInvites(), loadItems()]);
     refresh();
   }
 }

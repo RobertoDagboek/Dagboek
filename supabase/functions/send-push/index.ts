@@ -206,6 +206,7 @@ async function flushOutbox() {
     const { data: subs } = await db.from('push_subscriptions').select('*').eq('user_id', row.user_id);
     const payload = JSON.stringify({ title: row.title, body: row.body, url: row.url, tag: 'share', kind: 'share' });
 
+    let delivered = false;
     for (const s of subs ?? []) {
       try {
         await webpush.sendNotification(
@@ -215,6 +216,7 @@ async function flushOutbox() {
         await db.from('push_subscriptions')
           .update({ last_ok: new Date().toISOString(), failures: 0 }).eq('endpoint', s.endpoint);
         sent++;
+        delivered = true;
       } catch (e) {
         const gone = (e as { statusCode?: number }).statusCode;
         if (gone === 404 || gone === 410) {
@@ -224,9 +226,12 @@ async function flushOutbox() {
         }
       }
     }
-    // Marked sent even with no subscriptions - otherwise a device-less
-    // account would have this retried forever.
-    await db.from('notification_outbox').update({ sent: true }).eq('id', row.id);
+    // Marked sent once it actually reached at least one device, or there
+    // was never a device to reach - not on a transient delivery failure,
+    // which should retry next minute rather than being dropped for good.
+    if (delivered || !subs?.length) {
+      await db.from('notification_outbox').update({ sent: true }).eq('id', row.id);
+    }
   }
   return sent;
 }
@@ -242,7 +247,10 @@ Deno.serve(async (req) => {
   try { configureVapid(); }
   catch (e) { return Response.json({ ok: false, error: (e as Error).message }, { status: 503 }); }
 
-  const outboxSent = await flushOutbox();
+  // Isolated from the scheduled-reminder loop below on purpose: a bug or
+  // outage in this newer, event-driven path must not take a whole minute's
+  // task reminders down with it.
+  const outboxSent = await flushOutbox().catch(() => 0);
 
   const { data: states } = await db.from('notify_state').select('*').eq('enabled', true);
   let sent = 0;

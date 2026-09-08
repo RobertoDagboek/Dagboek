@@ -11,6 +11,14 @@
 --  itself goes through an accept/decline invite (planner_invites) rather
 --  than taking effect the moment it's sent - nothing lands on someone's
 --  account without them saying yes.
+--
+--  Known gap, not fixed here: supabase/functions/send-push still schedules
+--  reminder nudges by planner_items.user_id (the original creator) alone -
+--  it does not know about planner_item_members. So a fully delegated task
+--  will still nudge the person who gave it away, not the new owner, until
+--  that function is taught to look up members instead. Sharing itself
+--  (visibility, editing, the accept/decline flow) is unaffected; only the
+--  scheduled "it's time" push reminders have this blind spot.
 -- ============================================================
 
 -- ---------- who can touch each item, and how ----------
@@ -171,6 +179,15 @@ create table if not exists public.planner_invites (
 create index if not exists planner_invites_to_idx on public.planner_invites (to_user_id, status);
 create index if not exists planner_invites_from_idx on public.planner_invites (from_user_id);
 
+-- One pending invite per (item, recipient) at a time - a double-tap on
+-- "Send invite" (or resending while one is still waiting) would otherwise
+-- quietly create two, both showing up in their Inbox for the same task.
+-- Once answered, the row's status changes and this stops applying, so a
+-- fresh invite can always be sent after a decline.
+create unique index if not exists planner_invites_one_pending_idx
+  on public.planner_invites (item_id, to_user_id)
+  where status = 'pending';
+
 create or replace function public.planner_invites_before_insert()
 returns trigger
 language plpgsql security definer set search_path = public
@@ -231,11 +248,15 @@ begin
 
   if accept then
     if inv.share_kind = 'delegate' then
-      -- The sender asked not to touch it once it's someone else's job.
+      -- A full transfer, not just a downgrade: the delegate becomes the new
+      -- owner, because it is genuinely theirs now (they need to be able to
+      -- delete it or hand it off again). Leaving no one as owner would make
+      -- the item permanently stuck - nobody able to ever delete or re-share
+      -- it again, since both of those require role = 'owner'.
       update public.planner_item_members set role = 'viewer'
         where item_id = inv.item_id and user_id = inv.from_user_id;
       insert into public.planner_item_members (item_id, user_id, role)
-        values (inv.item_id, inv.to_user_id, 'editor')
+        values (inv.item_id, inv.to_user_id, 'owner')
         on conflict (item_id, user_id) do update set role = excluded.role;
     else
       insert into public.planner_item_members (item_id, user_id, role)
