@@ -192,7 +192,7 @@ select option { background: var(--bg-elevated-2); color: var(--label); }
   display: flex; align-items: center; gap: 8px; background: var(--bg-elevated); border-radius: var(--r-sm);
   padding: 10px 12px; margin-bottom: 14px;
 }
-.search-row.below-agenda { margin-top: 14px; }
+.search-row.below-agenda, .search-row.below-content { margin-top: 14px; }
 .search-icon { flex-shrink: 0; opacity: 0.7; }
 .search-row input {
   flex: 1; background: transparent; border: none; color: var(--label); font-size: 16px; outline: none;
@@ -278,15 +278,24 @@ select option { background: var(--bg-elevated-2); color: var(--label); }
 .ongoing-btn:active { transform: scale(0.96); }
 
 /* ---------- Goals ---------- */
-.goal-card { padding: 14px; }
-.goal-card + .goal-card { border-top: 0.5px solid var(--separator); }
+.goal-card {
+  background: var(--bg-elevated); border-radius: var(--r-md); padding: 14px 15px; margin-bottom: 10px;
+  border-left: 3px solid var(--sys-purple);
+}
+.goal-card.is-finished { border-left-color: var(--sys-green); opacity: 0.7; }
 .goal-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .goal-title { font-size: 17px; font-weight: 600; color: var(--label); cursor: pointer; }
 .goal-title.done { opacity: 0.4; text-decoration: line-through; }
-.goal-countdown { font-size: 13px; font-weight: 600; color: var(--sys-purple); flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.goal-countdown.over { color: var(--sys-red); }
-.goal-countdown.done { color: var(--sys-green); }
+.goal-countdown {
+  font-size: 12px; font-weight: 700; color: var(--sys-purple); background: rgba(191,90,242,0.16);
+  padding: 4px 10px; border-radius: var(--r-pill); flex-shrink: 0; font-variant-numeric: tabular-nums;
+}
+.goal-countdown.over { color: var(--sys-red); background: rgba(255,69,58,0.16); }
+.goal-countdown.done { color: var(--sys-green); background: rgba(48,209,88,0.16); }
 .goal-sub { font-size: 12.5px; color: var(--label-tertiary); margin-top: 3px; }
+.goal-bar { height: 5px; border-radius: var(--r-pill); background: var(--bg-elevated-3); margin-top: 12px; overflow: hidden; }
+.goal-bar > span { display: block; height: 100%; border-radius: var(--r-pill); background: var(--sys-purple); }
+.goal-card.is-finished .goal-bar > span { background: var(--sys-green); }
 .goal-tasks { margin-top: 10px; }
 .goal-task-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 14px; }
 .goal-task-row .row-title { font-size: 14px; }
@@ -363,7 +372,7 @@ select option { background: var(--bg-elevated-2); color: var(--label); }
    Diary
    ========================================================== */
 
-.diary-datebar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.diary-datebar { display: flex; align-items: center; gap: 8px; margin-top: 6px; margin-bottom: 14px; }
 .diary-datebar input {
   flex: 1; background: var(--bg-elevated); color: var(--label); border: none; border-radius: var(--r-sm);
   padding: 11px 12px; font-size: 15px; font-weight: 600; text-align: center;

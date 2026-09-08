@@ -135,6 +135,10 @@ export function renderToday() {
   const ongoing = items.filter(x => x.kind === 'ongoing' && !x.finished && matchesContext(x));
   const goalsSoon = items.filter(x => x.kind === 'goal' && !x.finished && daysBetween(today, x.deadline) <= 3)
     .sort((a, b) => a.deadline.localeCompare(b.deadline));
+  // Goals with breathing room still belong on Today, just not in the urgent
+  // banner above - the ones due soon already live there.
+  const goalsLater = items.filter(x => x.kind === 'goal' && !x.finished && daysBetween(today, x.deadline) > 3)
+    .sort((a, b) => a.deadline.localeCompare(b.deadline));
 
   const todays = items.filter(x => x.kind === 'task' && (appliesOnDate(x, today) || isCarried(x)) && matchesContext(x));
   todays.sort(todayOrder(today));
@@ -155,10 +159,10 @@ export function renderToday() {
     </div>`;
   }
 
-  if (ongoing.length) {
-    html += `<div class="section-title">Ongoing</div><div class="group">`;
-    html += ongoing.map(ongoingRowHtml).join('');
-    html += `</div>`;
+  if (ongoing.length || goalsLater.length) {
+    html += `<div class="section-title">Ongoing</div>`;
+    if (ongoing.length) html += `<div class="group">${ongoing.map(ongoingRowHtml).join('')}</div>`;
+    html += goalsLater.map(ongoingGoalHtml).join('');
   }
 
   html += `<div class="section-title">Tasks &nbsp;&middot;&nbsp; ${doneCount}/${todays.length}</div><div class="group">`;
@@ -170,7 +174,27 @@ export function renderToday() {
   wireOngoingRows(el);
   wireContextFilter(el);
   el.querySelectorAll('[data-goalbanner]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-goalbanner'))));
+  el.querySelectorAll('[data-goalbody]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-goalbody'))));
   $('draftNudge')?.addEventListener('click', () => document.dispatchEvent(new CustomEvent('app:goto', { detail: { screen: 'inbox' } })));
+}
+
+/** A goal shown on Today as ongoing work - same shape as the Goals screen's card, without the task breakdown. */
+function ongoingGoalHtml(g) {
+  const d = daysBetween(TODAY(), g.deadline);
+  const countdown = d < 0 ? `${-d}d overdue` : d === 0 ? 'Due today' : `${d}d left`;
+  const linked = items.filter(x => x.kind === 'task' && x.goalId === g.id);
+  const linkedDone = linked.filter(x => x.completed).length;
+  const pct = linked.length ? Math.round((linkedDone / linked.length) * 100) : 0;
+  return `<div class="goal-card">
+      <div class="goal-top">
+        <div style="flex:1;min-width:0;cursor:pointer;" data-goalbody="${g.id}">
+          <div class="goal-title">${escapeHtml(g.title)}</div>
+          <div class="goal-sub">Due ${fmtMonthDay(g.deadline)}${linked.length ? ` &middot; ${linkedDone}/${linked.length} tasks` : ''}</div>
+        </div>
+        <div class="goal-countdown ${d < 0 ? 'over' : ''}">${countdown}</div>
+      </div>
+      ${linked.length ? `<div class="goal-bar"><span style="width:${pct}%"></span></div>` : ''}
+    </div>`;
 }
 
 function ongoingRowHtml(x) {
@@ -564,12 +588,11 @@ export function renderGoals() {
   const active = items.filter(x => x.kind === 'goal' && !x.finished).sort((a, b) => a.deadline.localeCompare(b.deadline));
   const done = items.filter(x => x.kind === 'goal' && x.finished).sort((a, b) => (b.finishedDate || '').localeCompare(a.finishedDate || ''));
 
-  let html = `<div class="section-title">Active</div><div class="group">`;
-  html += active.length ? active.map(goalCardHtml).join('') : `<div class="empty-note">No goals yet — tap + and choose “Goal”.</div>`;
-  html += `</div>`;
+  let html = `<div class="section-title">Active</div>`;
+  html += active.length ? active.map(goalCardHtml).join('') : `<div class="group"><div class="empty-note">No goals yet — tap + and choose “Goal”.</div></div>`;
 
   if (done.length) {
-    html += `<div class="section-title">Completed</div><div class="group">${done.map(goalCardHtml).join('')}</div>`;
+    html += `<div class="section-title">Completed</div>${done.map(goalCardHtml).join('')}`;
   }
   html += `<div class="status-line" id="statusLine"></div>`;
   el.innerHTML = html;
@@ -625,17 +648,19 @@ function goalCardHtml(g) {
   const cdClass = g.finished ? 'done' : d < 0 ? 'over' : '';
   const linked = items.filter(x => x.kind === 'task' && x.goalId === g.id);
   const linkedDone = linked.filter(x => x.completed).length;
+  const pct = linked.length ? Math.round((linkedDone / linked.length) * 100) : 0;
 
-  return `<div class="goal-card">
+  return `<div class="goal-card ${g.finished ? 'is-finished' : ''}">
       <div class="goal-top">
         <button class="check-circle" style="width:22px;height:22px;" data-goalcheck="${g.id}" aria-label="Mark goal done">${g.finished ? ICON_CHECK : ''}</button>
         <div style="flex:1;min-width:0;">
           <div class="goal-title ${g.finished ? 'done' : ''}" data-goaltitle="${g.id}">${escapeHtml(g.title)}</div>
-          <div class="goal-sub">${`Due ${fmtMonthDay(g.deadline)}`}${linked.length ? ` &middot; ${`${linkedDone}/${linked.length} tasks done`}` : ''}</div>
+          <div class="goal-sub">${`Due ${fmtMonthDay(g.deadline)}`}${linked.length ? ` &middot; ${`${linkedDone}/${linked.length} tasks`}` : ''}</div>
           ${g.notes ? `<div class="row-notes" style="white-space:normal;">${escapeHtml(g.notes)}</div>` : ''}
         </div>
         <div class="goal-countdown ${cdClass}">${countdown}</div>
       </div>
+      ${linked.length ? `<div class="goal-bar"><span style="width:${pct}%"></span></div>` : ''}
       ${linked.length ? `<div class="goal-tasks">${linked.map(x => `
         <div class="goal-task-row">
           <button class="check-circle ${x.completed ? 'done' : ''}" data-check="${x.id}" style="width:19px;height:19px;">${x.completed ? ICON_CHECK : ''}</button>

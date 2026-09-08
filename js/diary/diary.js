@@ -98,13 +98,13 @@ export function renderDiary(seedText) {
       <p class="quote-full-src" id="quoteFullSrc">${escapeHtml(quote.s)} &middot; tap to shuffle &middot; ${QUOTES.length} in rotation</p>
     </div>
 
-    <div class="search-row">
+    <div id="diaryMain"></div>
+
+    <div class="search-row below-content">
       <span class="search-icon">${ICON_CHEVRON}</span>
       <input type="text" id="diarySearch" placeholder="Search your diary…" value="${escapeHtml(state.search)}">
       ${state.search ? `<button class="search-clear" id="diarySearchClear" type="button">&times;</button>` : ''}
-    </div>
-
-    <div id="diaryMain"></div>`;
+    </div>`;
 
   $('quoteStrip').addEventListener('click', () => {
     quoteOpen = !quoteOpen;
@@ -136,12 +136,6 @@ function renderDiaryMain(seedText) {
 async function renderEditor(seedText) {
   const box = $('diaryMain');
   box.innerHTML = `
-    <div class="diary-datebar">
-      <button class="week-nav-btn" id="dPrev" type="button">&lsaquo;</button>
-      <input type="date" id="dDate" value="${state.date}">
-      <button class="week-nav-btn" id="dNext" type="button">&rsaquo;</button>
-    </div>
-
     <div class="chip-row topic-chips" id="topicChips"></div>
 
     <div class="recorder">
@@ -158,6 +152,12 @@ async function renderEditor(seedText) {
     <p class="status-line" id="transcribeStatus" style="text-align:left;margin:0 0 10px;"></p>
 
     <div id="sections"></div>
+
+    <div class="diary-datebar">
+      <button class="week-nav-btn" id="dPrev" type="button">&lsaquo;</button>
+      <input type="date" id="dDate" value="${state.date}">
+      <button class="week-nav-btn" id="dNext" type="button">&rsaquo;</button>
+    </div>
 
     <div class="block">
       <div class="block-head"><span>Location</span>
