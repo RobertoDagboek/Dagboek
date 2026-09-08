@@ -189,7 +189,7 @@ function ongoingGoalHtml(g) {
       <div class="goal-top">
         <div style="flex:1;min-width:0;cursor:pointer;" data-goalbody="${g.id}">
           <div class="goal-title">${escapeHtml(g.title)}</div>
-          <div class="goal-sub">Due ${fmtMonthDay(g.deadline)}${linked.length ? ` &middot; ${linkedDone}/${linked.length} tasks` : ''}</div>
+          <div class="goal-sub">Due ${fmtMonthDay(g.deadline)}${linked.length ? ` &middot; ${linkedDone} of ${linked.length} steps` : ''}</div>
         </div>
         <div class="goal-countdown ${d < 0 ? 'over' : ''}">${countdown}</div>
       </div>
@@ -606,6 +606,11 @@ export function renderGoals() {
     e.stopPropagation(); toggleCompleteOn(e.currentTarget.getAttribute('data-check'), TODAY());
   }));
   el.querySelectorAll('[data-body]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-body'))));
+  el.querySelectorAll('.goal-tasks-head').forEach(b => b.addEventListener('click', () => {
+    const list = b.nextElementSibling;
+    list.hidden = !list.hidden;
+    b.classList.toggle('is-open', !list.hidden);
+  }));
   el.querySelectorAll('[data-goaladdtask]').forEach(b => b.addEventListener('click', e => {
     goalAddOpenId = e.currentTarget.getAttribute('data-goaladdtask');
     renderGoals();
@@ -655,20 +660,26 @@ function goalCardHtml(g) {
         <button class="check-circle" style="width:22px;height:22px;" data-goalcheck="${g.id}" aria-label="Mark goal done">${g.finished ? ICON_CHECK : ''}</button>
         <div style="flex:1;min-width:0;">
           <div class="goal-title ${g.finished ? 'done' : ''}" data-goaltitle="${g.id}">${escapeHtml(g.title)}</div>
-          <div class="goal-sub">${`Due ${fmtMonthDay(g.deadline)}`}${linked.length ? ` &middot; ${`${linkedDone}/${linked.length} tasks`}` : ''}</div>
+          <div class="goal-sub">Due ${fmtMonthDay(g.deadline)}</div>
           ${g.notes ? `<div class="row-notes" style="white-space:normal;">${escapeHtml(g.notes)}</div>` : ''}
         </div>
         <div class="goal-countdown ${cdClass}">${countdown}</div>
       </div>
       ${linked.length ? `<div class="goal-bar"><span style="width:${pct}%"></span></div>` : ''}
-      ${linked.length ? `<div class="goal-tasks">${linked.map(x => `
-        <div class="goal-task-row">
-          <button class="check-circle ${x.completed ? 'done' : ''}" data-check="${x.id}" style="width:19px;height:19px;">${x.completed ? ICON_CHECK : ''}</button>
-          <div style="flex:1;min-width:0;">
-            <div class="row-title" data-body="${x.id}">${escapeHtml(x.title)}</div>
-            ${stepMeta(x).length ? `<div class="row-notes" style="white-space:normal;">${stepMeta(x).join(' · ')}</div>` : ''}
-          </div>
-        </div>`).join('')}</div>` : ''}
+      ${linked.length ? `<div class="goal-tasks-drop">
+        <button class="goal-tasks-head ${goalAddOpenId === g.id ? 'is-open' : ''}" type="button">
+          <span class="goal-tasks-chev">&rsaquo;</span>
+          <span>${linkedDone} of ${linked.length} step${linked.length === 1 ? '' : 's'} completed</span>
+        </button>
+        <div class="goal-tasks" ${goalAddOpenId === g.id ? '' : 'hidden'}>${linked.map(x => `
+          <div class="goal-task-row">
+            <button class="check-circle ${x.completed ? 'done' : ''}" data-check="${x.id}" style="width:19px;height:19px;">${x.completed ? ICON_CHECK : ''}</button>
+            <div style="flex:1;min-width:0;">
+              <div class="row-title" data-body="${x.id}">${escapeHtml(x.title)}</div>
+              ${stepMeta(x).length ? `<div class="row-notes" style="white-space:normal;">${stepMeta(x).join(' · ')}</div>` : ''}
+            </div>
+          </div>`).join('')}</div>
+      </div>` : ''}
       ${goalAddOpenId === g.id
         ? `<input type="text" class="tag-input" data-goaltaskinput="${g.id}" placeholder="Task title, then Enter">`
         : `<button class="goal-add-task" data-goaladdtask="${g.id}" type="button">+ Add a task toward this</button>`}
