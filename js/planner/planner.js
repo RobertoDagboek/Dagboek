@@ -24,9 +24,13 @@ import { diaryDatesInRange, openDiaryDate } from '../diary/diary.js';
 
 export const CONTEXTS = ['Floor', 'Admin', 'App', 'Home'];
 export const CONTEXT_COLORS = { Floor: 'var(--sys-orange)', Admin: 'var(--sys-gray)', App: 'var(--sys-teal)', Home: 'var(--sys-purple)' };
+function ctxChipHtml(context) {
+  return `<span class="meta-chip ctx" style="--chip-color:${CONTEXT_COLORS[context] || 'var(--sys-gray)'}">${escapeHtml(context)}</span>`;
+}
 
 let activeContext = 'All';
 let monthCursor = null;
+let selectedDay = null;
 let searchQuery = '';
 let goalAddOpenId = null;
 let pendingDelete = null;
@@ -139,20 +143,14 @@ export function renderToday() {
   let html = contextFilterHtml();
 
   const pending = draftCount();
-  if (pending) {
-    html += `<div class="goal-banner draft-banner" id="draftNudge">
-      <div class="goal-banner-title">From your diary</div>
-      <div class="goal-banner-item"><span class="gname">${pending} reminder${pending === 1 ? '' : 's'} waiting to be finished</span><span class="gdays">Inbox &rsaquo;</span></div>
-    </div>`;
-  }
-
-  if (goalsSoon.length) {
-    html += `<div class="goal-banner">
-      <div class="goal-banner-title">Goals coming up</div>
+  if (pending || goalsSoon.length) {
+    html += `<div class="attn-card">
+      <div class="attn-title">&#9888; Needs attention</div>
+      ${pending ? `<div class="attn-item" id="draftNudge"><span class="aname">${pending} reminder${pending === 1 ? '' : 's'} waiting to be finished</span><span class="atag">Inbox &rsaquo;</span></div>` : ''}
       ${goalsSoon.map(g => {
         const d = daysBetween(today, g.deadline);
         const label = d < 0 ? `${-d}d overdue` : d === 0 ? 'Due today' : `${d}d left`;
-        return `<div class="goal-banner-item" data-goalbanner="${g.id}"><span class="gname">${escapeHtml(g.title)}</span><span class="gdays ${d < 0 ? 'over' : ''}">${label}</span></div>`;
+        return `<div class="attn-item" data-goalbanner="${g.id}"><span class="aname">${escapeHtml(g.title)}</span><span class="atag ${d < 0 ? 'over' : ''}">${label}</span></div>`;
       }).join('')}
     </div>`;
   }
@@ -212,7 +210,7 @@ function taskRowHtml(x, dateStr) {
   if (isCarried(x)) meta.push(`<span class="meta-chip age">${daysOverdue(x)}d</span>`);
   if (x.time) meta.push(`<span class="meta-chip">${fmtTime(x.time)}</span>`);
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
-  if (x.context) meta.push(`<span class="meta-chip">${escapeHtml(x.context)}</span>`);
+  if (x.context) meta.push(ctxChipHtml(x.context));
   if (x.estimate) meta.push(`<span class="meta-chip">&#9201; ${escapeHtml(x.estimate)}</span>`);
   if (x.timeLocked && x.time) meta.push('<span class="meta-chip locked">&#9200; fixed</span>');
   const q = quadrant(x.priority);
@@ -362,10 +360,12 @@ export function renderWeek() {
 
   html += contextFilterHtml();
   html += renderMonthGridHtml();
+  html += `<div class="agenda" id="dayAgenda"></div>`;
   el.innerHTML = html;
   wireSearchBar();
   wireContextFilter(el);
   wireMonthGrid(el);
+  renderAgenda();
 }
 
 function wireSearchBar() {
@@ -429,11 +429,14 @@ function renderMonthGridHtml() {
 
   let html = `<div class="month-nav">
     <button class="week-nav-btn" id="monthPrev" type="button">&lsaquo;</button>
-    <div class="month-nav-label">${fmtMonthYear(monthCursor)}</div>
+    <div class="month-nav-mid">
+      <div class="month-nav-label">${fmtMonthYear(monthCursor)}</div>
+      <button class="legend-toggle" id="legendToggle" type="button" aria-label="Show legend">i</button>
+    </div>
     <button class="week-nav-btn" id="monthNext" type="button">&rsaquo;</button>
   </div>`;
 
-  html += `<div class="month-legend">
+  html += `<div class="month-legend" id="monthLegend">
     ${CONTEXTS.map(c => `<span class="mleg-item"><span class="mleg-dot" style="background:${CONTEXT_COLORS[c]}"></span>${c}</span>`).join('')}
     <span class="mleg-item"><span class="mc-diary"></span>Diary</span>
     <span class="mleg-item"><span class="mleg-flag">&#9873;</span>Goal due</span>
@@ -458,7 +461,7 @@ function renderMonthGridHtml() {
       const hasDiary = diaryDays.has(d);
       const dueGoals = goalsDueOn(d);
       const openGoal = dueGoals.some(g => !g.finished);
-      html += `<button class="month-cell ${inMonth ? '' : 'outmonth'} ${d === today ? 'is-today' : ''} ${dueGoals.length ? 'is-deadline' : ''} ${openGoal ? '' : 'goal-done'}" data-monthday="${d}" type="button">
+      html += `<button class="month-cell ${inMonth ? '' : 'outmonth'} ${d === today ? 'is-today' : ''} ${d === selectedDay ? 'is-selected' : ''} ${dueGoals.length ? 'is-deadline' : ''} ${openGoal ? '' : 'goal-done'}" data-monthday="${d}" type="button">
         ${dueGoals.length ? `<span class="mc-flag" title="${escapeHtml(dueGoals.map(g => g.title).join(', '))}">&#9873;</span>` : ''}
         <span class="mc-num">${dayNum(d)}</span>
         ${(dayItems.length || hasDiary) ? `<span class="mc-dots">
@@ -478,51 +481,56 @@ function renderMonthGridHtml() {
 function wireMonthGrid(el) {
   $('monthPrev').addEventListener('click', () => { monthCursor = addMonths(monthCursor, -1); refresh(); });
   $('monthNext').addEventListener('click', () => { monthCursor = addMonths(monthCursor, 1); refresh(); });
-  el.querySelectorAll('[data-monthday]').forEach(b => b.addEventListener('click', e => openDayDetail(e.currentTarget.getAttribute('data-monthday'))));
+  el.querySelectorAll('[data-monthday]').forEach(b => b.addEventListener('click', e => selectDay(e.currentTarget.getAttribute('data-monthday'))));
+  $('legendToggle').addEventListener('click', () => {
+    $('monthLegend').classList.toggle('show');
+    $('legendToggle').classList.toggle('is-on');
+  });
 }
 
-function openDayDetail(dateStr) {
+/** Pick a day on the grid - just swaps the agenda card below it, no popup. */
+function selectDay(dateStr) {
+  selectedDay = dateStr;
+  document.querySelectorAll('[data-monthday]').forEach(b =>
+    b.classList.toggle('is-selected', b.getAttribute('data-monthday') === dateStr));
+  renderAgenda();
+}
+
+function renderAgenda() {
+  const box = $('dayAgenda');
+  if (!box) return;
+  if (!selectedDay) selectedDay = TODAY();
+  const dateStr = selectedDay;
+
   const dayItems = items.filter(x => x.kind === 'task' && appliesOnDate(x, dateStr) && matchesContext(x));
   dayItems.sort((a, b) => (a.time || 'zz').localeCompare(b.time || 'zz') || (a.order || 0) - (b.order || 0));
   const hasDiary = diaryDatesInRange(dateStr, dateStr).has(dateStr);
   const dueGoals = goalsDueOn(dateStr);
 
-  sheetEl().innerHTML = `
-    <div class="sheet-handle"></div>
-    <div class="sheet-title">${fmtDateFull(dateStr)}</div>
-    ${dueGoals.length ? `<div class="deadline-banner">
-      <div class="deadline-title">&#9873; ${dueGoals.length === 1 ? 'Goal due today' : 'Goals due today'}</div>
-      ${dueGoals.map(g => `<div class="deadline-item" data-goaldue="${g.id}">
-        <span class="${g.finished ? 'done' : ''}">${escapeHtml(g.title)}</span>
-        <span>${g.finished ? 'done' : 'open'}</span>
-      </div>`).join('')}
-    </div>` : ''}
-    <div class="group" style="margin-bottom:14px;">
-      ${dayItems.length ? dayItems.map(x => dayRowHtml(x, dateStr)).join('') : `<div class="empty-note">Nothing planned.</div>`}
-    </div>
-    <div class="day-sheet-footer">
-      <button class="sheet-move-btn" id="dayDiaryBtn" type="button" style="width:100%;margin-bottom:10px;">
-        ${hasDiary ? '✎ Open this day in the diary' : '✎ Write a diary entry for this day'}
-      </button>
-      <div class="sheet-actions"><button class="sheet-cancel" id="dayClose" type="button">Close</button></div>
-    </div>`;
+  box.innerHTML = `
+    <div class="agenda-date">${fmtDateFull(dateStr)}</div>
+    ${dueGoals.map(g => `<div class="agenda-goal" data-goaldue="${g.id}">
+      <span class="${g.finished ? 'done' : ''}">&#9873; ${escapeHtml(g.title)}</span>
+      <span>${g.finished ? 'done' : 'open'}</span>
+    </div>`).join('')}
+    ${dayItems.length ? dayItems.map(x => dayRowHtml(x, dateStr)).join('')
+      : (dueGoals.length ? '' : `<div class="empty-note">Nothing planned.</div>`)}
+    <button class="agenda-diary-btn" id="agendaDiaryBtn" type="button">
+      ${hasDiary ? '✎ Open this day in the diary' : '✎ Write a diary entry for this day'}
+    </button>`;
 
-  $('dayClose').addEventListener('click', closeSheet);
-  sheetEl().querySelectorAll('[data-goaldue]').forEach(b => b.addEventListener('click', e =>
+  $('agendaDiaryBtn').addEventListener('click', () => openDiaryDate(dateStr));
+  box.querySelectorAll('[data-goaldue]').forEach(b => b.addEventListener('click', e =>
     openPlannerEditor(e.currentTarget.getAttribute('data-goaldue'))));
-  $('dayDiaryBtn').addEventListener('click', () => { closeSheet(); openDiaryDate(dateStr); });
-  sheetEl().querySelectorAll('[data-check]').forEach(b => b.addEventListener('click', e => {
+  box.querySelectorAll('[data-check]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
     toggleCompleteOn(e.currentTarget.getAttribute('data-check'), dateStr);
-    openDayDetail(dateStr);
   }));
-  sheetEl().querySelectorAll('[data-body]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-body'))));
-  sheetEl().querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
+  box.querySelectorAll('[data-body]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-body'))));
+  box.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
     requestDelete(e.currentTarget.getAttribute('data-del'), e.currentTarget);
-    openDayDetail(dateStr);
   }));
-  openSheet();
 }
 
 function dayRowHtml(x, dateStr) {
@@ -530,7 +538,7 @@ function dayRowHtml(x, dateStr) {
   const meta = [];
   if (x.time) meta.push(`<span class="meta-chip">${fmtTime(x.time)}</span>`);
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
-  if (x.context) meta.push(`<span class="meta-chip">${escapeHtml(x.context)}</span>`);
+  if (x.context) meta.push(ctxChipHtml(x.context));
   if (x.estimate) meta.push(`<span class="meta-chip">⏱ ${escapeHtml(x.estimate)}</span>`);
   return `<div class="row week-task-row">
       <button class="check-circle ${done ? 'done' : ''}" data-check="${x.id}" aria-label="Toggle done">${done ? ICON_CHECK : ''}</button>
@@ -688,9 +696,13 @@ function draftRowHtml(x) {
 }
 
 function inboxRowHtml(x) {
+  const meta = [];
+  if (x.context) meta.push(ctxChipHtml(x.context));
+  if (x.estimate) meta.push(`<span class="meta-chip">&#9201; ${escapeHtml(x.estimate)}</span>`);
   return `<div class="row">
       <div class="row-body" data-body="${x.id}">
-        <div class="row-title">${escapeHtml(x.title)}${x.context ? ` <span class="meta-chip">${escapeHtml(x.context)}</span>` : ''}</div>
+        <div class="row-title">${escapeHtml(x.title)}</div>
+        ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
       </div>
       <button class="link" data-movetoday="${x.id}" type="button">Today</button>
       <button class="link" data-movetom="${x.id}" type="button">Tomorrow</button>

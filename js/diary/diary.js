@@ -43,6 +43,7 @@ const state = {
 let dirty = false;
 let filling = false;
 let quote = null;
+let quoteOpen = false;
 let entryDates = new Set();   // every date that has an entry, for the month dots
 let editorFor = null;         // which date the editor on screen belongs to
 let loadRun = 0;              // bumped per load, so a stale one can bow out
@@ -87,10 +88,14 @@ export function renderDiary(seedText) {
   if (!quote) quote = randomQuote();
 
   el.innerHTML = `
-    <div class="quote-card" id="quoteCard">
-      <p class="quote-text" id="quoteText">&ldquo;${escapeHtml(quote.t)}&rdquo;</p>
-      <p class="quote-source" id="quoteSource">${escapeHtml(quote.s)}</p>
-      <p class="quote-count">Tap for another &middot; ${QUOTES.length} in rotation</p>
+    <div class="quote-strip ${quoteOpen ? 'open' : ''}" id="quoteStrip">
+      <span class="quote-icon">&#128214;</span>
+      <span class="quote-line" id="quoteLine">${escapeHtml(quote.t)}</span>
+      <span class="quote-chev">&rsaquo;</span>
+    </div>
+    <div class="quote-full" id="quoteFull" ${quoteOpen ? '' : 'hidden'}>
+      <p class="quote-full-text" id="quoteFullText">&ldquo;${escapeHtml(quote.t)}&rdquo;</p>
+      <p class="quote-full-src" id="quoteFullSrc">${escapeHtml(quote.s)} &middot; tap to shuffle &middot; ${QUOTES.length} in rotation</p>
     </div>
 
     <div class="search-row">
@@ -101,10 +106,16 @@ export function renderDiary(seedText) {
 
     <div id="diaryMain"></div>`;
 
-  $('quoteCard').addEventListener('click', () => {
+  $('quoteStrip').addEventListener('click', () => {
+    quoteOpen = !quoteOpen;
+    $('quoteStrip').classList.toggle('open', quoteOpen);
+    $('quoteFull').hidden = !quoteOpen;
+  });
+  $('quoteFull').addEventListener('click', () => {
     quote = randomQuote(quote);
-    $('quoteText').textContent = `“${quote.t}”`;
-    $('quoteSource').textContent = quote.s;
+    $('quoteLine').textContent = quote.t;
+    $('quoteFullText').textContent = `“${quote.t}”`;
+    $('quoteFullSrc').textContent = `${quote.s} · tap to shuffle · ${QUOTES.length} in rotation`;
   });
 
   const search = $('diarySearch');

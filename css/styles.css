@@ -25,7 +25,7 @@
   --sys-purple: #bf5af2;
   --sys-gray: #8e8e93;
 
-  --r-xl: 22px; --r-lg: 18px; --r-md: 14px; --r-sm: 10px; --r-pill: 999px;
+  --r-xl: 24px; --r-lg: 20px; --r-md: 16px; --r-sm: 12px; --r-pill: 999px;
   --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --sheet-scrim: rgba(0,0,0,0.5);
 }
@@ -200,42 +200,66 @@ select option { background: var(--bg-elevated-2); color: var(--label); }
 .search-clear { background: none; border: none; color: var(--label-tertiary); font-size: 15px; cursor: pointer; padding: 2px 4px; flex-shrink: 0; }
 
 /* ---------- Month grid ---------- */
-.month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 8px; }
+.month-nav-mid { display: flex; align-items: center; gap: 8px; }
 .month-nav-label { font-size: 17px; font-weight: 700; color: var(--label); }
-.month-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font-size: 11.5px; color: var(--label-secondary); }
+.legend-toggle {
+  width: 24px; height: 24px; border-radius: 50%; background: var(--bg-elevated); border: none;
+  color: var(--label-secondary); font-size: 11px; font-weight: 800; font-style: italic; cursor: pointer; flex-shrink: 0;
+}
+.legend-toggle.is-on { background: var(--sys-blue); color: #fff; }
+.month-legend { display: none; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 12px; font-size: 11.5px; color: var(--label-secondary); background: var(--bg-elevated); border-radius: var(--r-md); padding: 10px 12px; }
+.month-legend.show { display: flex; }
 .mleg-item { display: flex; align-items: center; gap: 4px; }
 .mleg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
-.month-dow-row, .month-week-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.month-dow-row { margin-bottom: 6px; }
+.month-dow-row, .month-week-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.month-dow-row { margin-bottom: 8px; }
 .month-dow { text-align: center; font-size: 10.5px; font-weight: 600; color: var(--label-tertiary); text-transform: uppercase; }
-.month-week-row { margin-bottom: 4px; }
+.month-week-row { margin-bottom: 6px; }
 .month-cell {
-  background: var(--bg-elevated); border: none; border-radius: 8px; min-height: 46px;
+  background: var(--bg-elevated); border: none; border-radius: var(--r-md); min-height: 58px;
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-  padding: 5px 2px; color: var(--label); cursor: pointer; gap: 3px;
+  padding: 7px 2px 6px; color: var(--label); cursor: pointer; gap: 4px; position: relative;
 }
 .month-cell.outmonth { opacity: 0.3; }
-.month-cell.is-today { background: var(--sys-blue); }
+.month-cell.is-today { background: linear-gradient(160deg, var(--sys-blue), #0868c9); }
 .month-cell.is-today .mc-num { color: #fff; font-weight: 800; }
-.mc-num { font-size: 12px; font-weight: 600; }
-.mc-dots { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; justify-content: center; }
-.mc-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.month-cell.is-selected { box-shadow: inset 0 0 0 1.5px var(--sys-blue); }
+.month-cell.is-today.is-selected { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.85); }
+.mc-num { font-size: 13px; font-weight: 700; }
+.mc-dots { display: flex; align-items: center; gap: 2.5px; flex-wrap: wrap; justify-content: center; }
+.mc-dot { width: 5.5px; height: 5.5px; border-radius: 50%; flex-shrink: 0; }
 .mc-count { font-size: 8.5px; color: var(--label-tertiary); margin-left: 1px; }
 .month-cell.is-today .mc-count { color: rgba(255,255,255,0.8); }
-.mc-diary { width: 5px; height: 5px; border-radius: 1.5px; background: var(--sys-yellow); flex-shrink: 0; }
+.mc-diary { width: 5.5px; height: 5.5px; border-radius: 2px; background: var(--sys-yellow); flex-shrink: 0; }
 
-/* ---------- Goal banner ---------- */
-.goal-banner {
-  background: linear-gradient(160deg, rgba(191,90,242,0.2), rgba(191,90,242,0.06));
-  border: 0.5px solid rgba(191,90,242,0.3);
-  border-radius: var(--r-lg); padding: 12px 14px; margin-bottom: 4px;
+/* ---------- Inline day agenda (below the grid, replaces the old popup) ---------- */
+.agenda { margin-top: 14px; background: var(--bg-elevated); border-radius: var(--r-lg); padding: 14px 14px 15px; }
+.agenda-date { font-size: 15.5px; font-weight: 700; margin-bottom: 10px; }
+.agenda-goal {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 11px; margin-bottom: 8px;
+  background: rgba(191,90,242,0.14); border: 0.5px solid rgba(191,90,242,0.3); border-radius: var(--r-sm);
+  font-size: 13px; font-weight: 700; color: var(--sys-purple); cursor: pointer;
 }
-.goal-banner-title { font-size: 12.5px; font-weight: 600; color: var(--sys-purple); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
-.goal-banner-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 14.5px; }
-.goal-banner-item .gname { color: var(--label); font-weight: 500; }
-.goal-banner-item .gdays { color: var(--label-secondary); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.goal-banner-item .gdays.over { color: var(--sys-red); font-weight: 600; }
+.agenda-goal .done { opacity: 0.55; text-decoration: line-through; }
+.agenda-diary-btn {
+  width: 100%; margin-top: 10px; background: var(--sys-blue); color: #fff; border: none;
+  border-radius: var(--r-pill); padding: 12px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: var(--sans);
+}
+
+/* ---------- Needs-attention banner (drafts + goals due soon, merged) ---------- */
+.attn-card {
+  background: linear-gradient(160deg, rgba(255,159,10,0.18), rgba(255,159,10,0.05));
+  border: 0.5px solid rgba(255,159,10,0.3);
+  border-radius: var(--r-lg); padding: 13px 15px; margin-bottom: 4px;
+}
+.attn-title { font-size: 12.5px; font-weight: 700; color: var(--sys-orange); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.attn-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; cursor: pointer; }
+.attn-item + .attn-item { border-top: 0.5px solid rgba(255,159,10,0.2); }
+.attn-item .aname { color: var(--label); font-weight: 500; font-size: 14.5px; }
+.attn-item .atag { color: var(--label-secondary); font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.attn-item .atag.over { color: var(--sys-red); }
 
 /* ---------- Ongoing ---------- */
 .ongoing-row { padding: 12px 14px; }
@@ -309,14 +333,6 @@ select option { background: var(--bg-elevated-2); color: var(--label); }
 .sheet-save { background: var(--sys-blue); color: #fff; }
 .sheet-delete { background: rgba(255,69,58,0.15); color: var(--sys-red); }
 .sheet-cancel { background: var(--bg-elevated-2); color: var(--label); }
-/* Pinned to the bottom of the day-detail sheet so it stays in the same spot
-   no matter how many tasks/goals are listed above it - a long list used to
-   push it down, so a tap aimed at its usual position could land on a task
-   row instead. */
-.day-sheet-footer {
-  position: sticky; bottom: 0; margin-top: 14px; padding-top: 10px;
-  background: rgba(28,28,30,0.94); backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%);
-}
 .sheet-move-row { display: flex; gap: 8px; margin-bottom: 4px; }
 .sheet-move-btn { flex: 1; background: var(--bg-elevated-2); color: var(--label); border: none; border-radius: var(--r-sm); padding: 10px; font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .sheet-hint { font-size: 12.5px; color: var(--label-tertiary); margin: 6px 2px 0; line-height: 1.45; }
@@ -482,14 +498,25 @@ mark { background: rgba(10,132,255,0.3); color: inherit; border-radius: 3px; pad
   color: #fff; font-size: 25px; line-height: 1; border: none; cursor: pointer;
 }
 
-/* quote of the day */
-.quote-card {
-  background: var(--bg-elevated); border-left: 3px solid var(--sys-yellow);
-  border-radius: var(--r-md); padding: 14px 16px; margin-bottom: 16px; cursor: pointer;
+/* quote of the day - a one-line strip that expands on tap */
+.quote-strip {
+  display: flex; align-items: center; gap: 9px; padding: 11px 13px; margin-bottom: 14px; cursor: pointer;
+  background: linear-gradient(150deg, rgba(255,214,10,0.14), rgba(255,214,10,0.03));
+  border: 0.5px solid rgba(255,214,10,0.28); border-radius: var(--r-lg);
 }
-.quote-card:active { transform: scale(0.99); }
-.quote-text { margin: 0; font-size: 14.5px; line-height: 1.5; font-style: italic; color: var(--label); }
-.quote-source { margin: 9px 0 0; font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sys-yellow); }
+.quote-strip.open { border-radius: var(--r-lg) var(--r-lg) 0 0; border-bottom: none; margin-bottom: 0; padding-bottom: 8px; }
+.quote-strip:active { transform: scale(0.99); }
+.quote-icon { font-size: 15px; flex-shrink: 0; }
+.quote-line { flex: 1; min-width: 0; font-size: 12.5px; color: var(--label-secondary); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quote-chev { color: var(--sys-yellow); font-size: 11px; flex-shrink: 0; transition: transform 0.2s ease; }
+.quote-strip.open .quote-chev { transform: rotate(90deg); }
+.quote-full {
+  padding: 2px 13px 13px; margin-bottom: 14px; cursor: pointer;
+  background: linear-gradient(150deg, rgba(255,214,10,0.14), rgba(255,214,10,0.03));
+  border: 0.5px solid rgba(255,214,10,0.28); border-top: none; border-radius: 0 0 var(--r-lg) var(--r-lg);
+}
+.quote-full-text { margin: 0 0 4px; font-size: 14.5px; line-height: 1.5; font-style: italic; color: var(--label); }
+.quote-full-src { margin: 0; font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; color: var(--sys-yellow); }
 
 /* ==========================================================
    PIN lock
@@ -568,12 +595,6 @@ mark { background: rgba(10,132,255,0.3); color: inherit; border-radius: 3px; pad
 /* a reminder caught while dictating, waiting to be finished */
 .draft-row { border-left: 3px solid var(--sys-yellow); }
 .meta-chip.draft { background: rgba(255,214,10,0.18); color: var(--sys-yellow); font-weight: 700; }
-.draft-banner {
-  background: linear-gradient(160deg, rgba(255,214,10,0.16), rgba(255,214,10,0.05));
-  border-color: rgba(255,214,10,0.3);
-  cursor: pointer;
-}
-.draft-banner .goal-banner-title { color: var(--sys-yellow); }
 
 /* ---------- a goal's deadline on the calendar ---------- */
 .month-cell.is-deadline {
@@ -661,10 +682,10 @@ mark { background: rgba(10,132,255,0.3); color: inherit; border-radius: 3px; pad
 }
 .month-cell.is-today .mc-done { color: #fff; }
 
-.quote-count { margin: 6px 0 0; font-size: 11px; color: var(--label-tertiary); }
-
 /* a task whose hour is fixed, whatever its quadrant */
 .meta-chip.locked { background: rgba(100,210,255,0.18); color: var(--sys-teal); font-weight: 700; }
+/* a task/goal's context, tinted with that context's own colour */
+.meta-chip.ctx { background: color-mix(in srgb, var(--chip-color, var(--sys-gray)) 18%, transparent); color: var(--chip-color, var(--sys-gray)); font-weight: 700; }
 
 /* what you already got through today */
 .done-drop { margin-top: 14px; }
