@@ -145,6 +145,8 @@ select option { background: var(--bg-elevated-2); color: var(--label); }
 
 /* ---------- Capture sheet ---------- */
 .cap-area-label { font-size: 13px; font-weight: 600; color: var(--label-secondary); margin: 4px 0 8px; }
+.cap-area-group + .cap-area-group { margin-top: 12px; }
+.cap-area-group-label { font-size: 10.5px; font-weight: 700; color: var(--label-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
 .cap-area-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .cap-area-btn {
   background: var(--bg-elevated-2); color: var(--label); border: none; border-radius: var(--r-pill);
@@ -153,6 +155,45 @@ select option { background: var(--bg-elevated-2); color: var(--label); }
 .cap-area-btn.active { background: var(--sys-blue); color: #fff; font-weight: 700; }
 .cap-extra-group { margin-top: 2px; }
 .cap-extra-note { font-size: 13px; color: var(--label-tertiary); margin-top: 10px; }
+
+/* ---------- Description field: notes or a checklist ---------- */
+.desc-mode-toggle { display: flex; gap: 8px; margin-bottom: 8px; }
+.desc-mode-btn {
+  flex: 1; padding: 8px; border: none; border-radius: var(--r-sm);
+  background: var(--bg-elevated-2); color: var(--label-secondary);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.desc-mode-btn.is-on { background: var(--sys-blue); color: #fff; }
+.checklist { background: var(--bg-elevated-2); border-radius: var(--r-sm); padding: 6px 4px; margin-bottom: 12px; }
+.checklist-row { display: flex; align-items: center; gap: 10px; padding: 8px 8px; }
+.checklist-row + .checklist-row { border-top: 0.5px solid var(--separator); }
+.checklist-text { flex: 1; min-width: 0; font-size: 15px; color: var(--label); word-break: break-word; }
+.checklist-text.done { opacity: 0.4; text-decoration: line-through; }
+.checklist .checklist-add { margin: 4px 8px 4px; width: calc(100% - 16px); }
+.meta-chip.checklist-chip { background: rgba(10,132,255,0.16); color: var(--sys-blue); font-weight: 600; }
+
+/* ---------- sharing: delegate / collaborate / share progress ---------- */
+.sheet-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.sheet-title-row .sheet-title { margin-bottom: 0; }
+.share-btn { flex-shrink: 0; padding: 6px 4px; }
+.share-banner {
+  background: rgba(100,210,255,0.12); border: 0.5px solid rgba(100,210,255,0.3);
+  border-radius: var(--r-sm); padding: 9px 12px; margin: -2px 0 12px;
+  font-size: 12.5px; font-weight: 600; color: var(--sys-teal);
+}
+.meta-chip.shared-chip { background: rgba(100,210,255,0.16); color: var(--sys-teal); font-weight: 600; }
+.share-kind-list { margin-bottom: 12px; }
+.share-kind-row {
+  display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px;
+  background: var(--bg-elevated-2); border-radius: var(--r-sm); cursor: pointer;
+}
+.share-kind-row + .share-kind-row { margin-top: 8px; }
+.share-kind-row input { margin-top: 3px; flex-shrink: 0; }
+.share-kind-body { display: flex; flex-direction: column; gap: 2px; }
+.share-kind-label { font-size: 14.5px; font-weight: 700; color: var(--label); }
+.share-kind-hint { font-size: 12.5px; color: var(--label-tertiary); line-height: 1.35; }
+.invite-row { align-items: flex-start; }
+.invite-row .row-notes { white-space: normal; }
 
 /* ---------- Date strip ---------- */
 .date-strip { background: var(--bg-elevated-2); border-radius: var(--r-md); padding: 12px; }

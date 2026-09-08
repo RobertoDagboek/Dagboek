@@ -190,6 +190,47 @@ function localNow(offsetMins: number) {
   };
 }
 
+/**
+ * Event-driven notifications - invite sent, invite accepted/declined - land
+ * as rows in notification_outbox (written by triggers/functions added in
+ * migration 015, never by the client directly) rather than being pushed
+ * synchronously from the browser. This flushes whatever is waiting, using
+ * the same subscriptions/VAPID setup as the scheduled nudges below.
+ */
+async function flushOutbox() {
+  const { data: rows } = await db.from('notification_outbox')
+    .select('*').eq('sent', false).order('created_at').limit(200);
+  let sent = 0;
+
+  for (const row of rows ?? []) {
+    const { data: subs } = await db.from('push_subscriptions').select('*').eq('user_id', row.user_id);
+    const payload = JSON.stringify({ title: row.title, body: row.body, url: row.url, tag: 'share', kind: 'share' });
+
+    for (const s of subs ?? []) {
+      try {
+        await webpush.sendNotification(
+          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+          payload,
+        );
+        await db.from('push_subscriptions')
+          .update({ last_ok: new Date().toISOString(), failures: 0 }).eq('endpoint', s.endpoint);
+        sent++;
+      } catch (e) {
+        const gone = (e as { statusCode?: number }).statusCode;
+        if (gone === 404 || gone === 410) {
+          await db.from('push_subscriptions').delete().eq('endpoint', s.endpoint);
+        } else {
+          await db.rpc('bump_push_failure', { ep: s.endpoint }).catch(() => {});
+        }
+      }
+    }
+    // Marked sent even with no subscriptions - otherwise a device-less
+    // account would have this retried forever.
+    await db.from('notification_outbox').update({ sent: true }).eq('id', row.id);
+  }
+  return sent;
+}
+
 Deno.serve(async (req) => {
   // Only the scheduler may run this. Without the check, the anon key sitting
   // in the page source would be enough for anyone to notify this account.
@@ -200,6 +241,8 @@ Deno.serve(async (req) => {
   // Say plainly what is missing rather than dying with a 500.
   try { configureVapid(); }
   catch (e) { return Response.json({ ok: false, error: (e as Error).message }, { status: 503 }); }
+
+  const outboxSent = await flushOutbox();
 
   const { data: states } = await db.from('notify_state').select('*').eq('enabled', true);
   let sent = 0;
@@ -276,7 +319,7 @@ Deno.serve(async (req) => {
     }).eq('user_id', st.user_id);
   }
 
-  return Response.json({ ok: true, sent });
+  return Response.json({ ok: true, sent: sent + outboxSent });
 });
 
 /** Mirrors appliesOnDate in js/planner/planner.js. */

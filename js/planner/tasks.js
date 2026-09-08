@@ -21,7 +21,8 @@ let saved = new Map();
 
 const COLUMNS = 'id, kind, title, notes, estimate, entry_date, at_time, recurring, flagged, context, '
   + 'completed, last_done, goal_id, started_date, touched_date, deadline, finished, '
-  + 'finished_date, sort_order, created_at, repeat_days, draft, source, heard, priority, done_dates, time_locked';
+  + 'finished_date, sort_order, created_at, repeat_days, draft, source, heard, priority, done_dates, time_locked, '
+  + 'notes_mode, checklist';
 
 const orNull = v => (v === '' || v === undefined ? null : v);
 
@@ -53,6 +54,8 @@ function toRow(t) {
     draft: !!t.draft,
     source: orNull(t.source),
     heard: orNull(t.heard),
+    notes_mode: t.notesMode === 'checklist' ? 'checklist' : 'text',
+    checklist: Array.isArray(t.checklist) ? t.checklist : [],
     sort_order: Number(t.order) || 0,
     created_at: new Date(Number(t.createdAt) || Date.now()).toISOString(),
   };
@@ -86,6 +89,8 @@ function fromRow(r) {
     draft: !!r.draft,
     source: r.source ?? '',
     heard: r.heard ?? '',
+    notesMode: r.notes_mode === 'checklist' ? 'checklist' : 'text',
+    checklist: Array.isArray(r.checklist) ? r.checklist : [],
     order: Number(r.sort_order) || 0,
     createdAt: r.created_at ? Date.parse(r.created_at) : Date.now(),
   };
@@ -93,10 +98,29 @@ function fromRow(r) {
 
 const stamp = t => JSON.stringify(toRow(t));
 
+/**
+ * Which role the current account holds on each item ('owner' | 'editor' |
+ * 'viewer'), used to lock editing down for anything shared into your list.
+ * Falls back to everyone being 'owner' if migration 015 has not been run
+ * yet, so an unshared account keeps working exactly as before.
+ */
+async function loadRoles() {
+  try {
+    const { data: { user } } = await supa().auth.getUser();
+    if (!user) return new Map();
+    const { data, error } = await supa().from('planner_item_members').select('item_id, role').eq('user_id', user.id);
+    if (error) throw error;
+    return new Map((data ?? []).map(m => [m.item_id, m.role]));
+  } catch {
+    return new Map();
+  }
+}
+
 export async function loadItems() {
   const { data, error } = await supa().from(TABLE).select(COLUMNS);
   if (error) throw error;
-  items = (data ?? []).map(fromRow);
+  const roles = await loadRoles();
+  items = (data ?? []).map(r => ({ ...fromRow(r), role: roles.get(r.id) || 'owner' }));
   saved = new Map(items.map(t => [t.id, stamp(t)]));
   return items;
 }

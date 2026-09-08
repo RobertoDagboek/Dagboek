@@ -25,8 +25,9 @@ import {
   sheetEl, openSheet, closeSheet, toast,
 } from './core/ui.js';
 import {
-  renderToday, renderWeek, renderGoals, renderInbox,
+  renderToday, renderWeek, renderGoals, renderInbox, openPlannerEditor,
   openCaptureSheet, inboxCount, goalsSoonCount, monthCursorLabel,
+  loadInvites, pendingInviteCount,
 } from './planner/planner.js';
 import { maybeBrief, openBriefing } from './planner/briefing.js';
 import {
@@ -116,6 +117,7 @@ async function enterApp() {
   try {
     await loadItems();
     await loadDiaryIndex();
+    await loadInvites();
   } catch (e) {
     toast(e.message);
   }
@@ -230,7 +232,7 @@ function switchScreen(name, seed) {
 
 function renderTabBar() {
   const el = $('tabbar');
-  const inbox = inboxCount();
+  const inbox = inboxCount() + pendingInviteCount();
   const goals = goalsSoonCount();
   el.innerHTML = TABS.map(tab => {
     let badge = '';
@@ -633,6 +635,7 @@ function openFromUrl(url) {
   try {
     const q = new URL(url, location.href).searchParams;
     if (q.get('briefing')) { openBriefing(today); return; }
+    if (q.get('invite')) { switchScreen('inbox'); return; }
     const id = q.get('task');
     if (id) { switchScreen('today'); openPlannerEditor(id); return; }
     switchScreen('today');

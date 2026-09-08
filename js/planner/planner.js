@@ -6,7 +6,7 @@
 // Supabase-backed store in tasks.js instead of the `window.storage` object,
 // which does not exist outside the environment it was written in.
 
-import { items, saveItems } from './tasks.js';
+import { items, saveItems, loadItems } from './tasks.js';
 import { settings } from '../core/config.js';
 import { QUADRANTS, quadrant, DEFAULT_QUADRANT } from './priority.js';
 import {
@@ -21,6 +21,24 @@ import {
   sheetEl, openSheet, closeSheet, toast, refresh,
 } from '../core/ui.js';
 import { diaryDatesInRange, openDiaryDate } from '../diary/diary.js';
+import { sendInvite, myInvites, respondToInvite, cancelInvite, currentUserId } from '../core/supa.js';
+
+/** Invites waiting on you to accept or decline - see loadInvites(). */
+let receivedInvites = [];
+
+/**
+ * Refresh the received-invites cache. Call once at boot; after that, actions
+ * (accept/decline) update the cache in place rather than re-fetching, so
+ * there is no risk of this looping back into a render that re-fetches again.
+ */
+export async function loadInvites() {
+  try {
+    const [all, me] = await Promise.all([myInvites(), currentUserId()]);
+    receivedInvites = all.filter(i => i.to_user_id === me && i.status === 'pending');
+  } catch { receivedInvites = []; }
+}
+
+export function pendingInviteCount() { return receivedInvites.length; }
 
 export const CONTEXTS = ['Floor', 'Admin', 'App', 'Home'];
 export const CONTEXT_COLORS = { Floor: 'var(--sys-orange)', Admin: 'var(--sys-gray)', App: 'var(--sys-teal)', Home: 'var(--sys-purple)' };
@@ -72,6 +90,9 @@ export function goalsDueOn(dateStr) {
 }
 
 export function isInboxTask(t2) { return t2.kind === 'task' && !t2.draft && t2.recurring === 'none' && !t2.date; }
+/** Shared-item permissions - unset (a plain, unshared item) counts as owner. */
+export function canEdit(t2) { const r = t2.role || 'owner'; return r === 'owner' || r === 'editor'; }
+export function canDelete(t2) { return (t2.role || 'owner') === 'owner'; }
 export function drafts() { return items.filter(x => x.draft); }
 export function draftCount() { return drafts().length; }
 function matchesContext(t2) { return activeContext === 'All' || t2.context === activeContext; }
@@ -218,11 +239,11 @@ function wireOngoingRows(el) {
   el.querySelectorAll('[data-ongoingbody]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-ongoingbody'))));
   el.querySelectorAll('[data-log]').forEach(b => b.addEventListener('click', e => {
     const x = items.find(i => i.id === e.currentTarget.getAttribute('data-log'));
-    if (x) { x.lastTouchedDate = TODAY(); save(); refresh(); }
+    if (x && canEdit(x)) { x.lastTouchedDate = TODAY(); save(); refresh(); }
   }));
   el.querySelectorAll('[data-finish]').forEach(b => b.addEventListener('click', e => {
     const x = items.find(i => i.id === e.currentTarget.getAttribute('data-finish'));
-    if (x) { x.finished = true; x.finishedDate = TODAY(); save(); refresh(); }
+    if (x && canEdit(x)) { x.finished = true; x.finishedDate = TODAY(); save(); refresh(); }
   }));
 }
 
@@ -242,6 +263,8 @@ function taskRowHtml(x, dateStr) {
     meta.push(`<span class="meta-chip quad" style="--q:${q.colour}">${q.label}</span>`);
   }
   if (x.goalId) meta.push(`<span class="meta-chip goal">goal</span>`);
+  if (checklistProgressChip(x)) meta.push(checklistProgressChip(x));
+  if (sharedChip(x)) meta.push(sharedChip(x));
   return `<div class="swipe-slot" data-taskslot="${x.id}">
       <div class="swipe-bg">
         <span class="swipe-side left">${ICON_CHECK} Complete</span>
@@ -273,6 +296,7 @@ function wireTaskRows(el, dateStr) {
 function toggleCompleteOn(id, dateStr) {
   const x = items.find(i => i.id === id);
   if (!x) return;
+  if (!canEdit(x)) { toast("View only — you can't change this."); return; }
   if (x.recurring && x.recurring !== 'none') {
     const days = new Set(x.doneDates ?? []);
     // Fold in a pre-012 tick so it is not lost the first time this is touched.
@@ -288,6 +312,8 @@ function toggleCompleteOn(id, dateStr) {
 }
 
 function requestDelete(id, btn) {
+  const x = items.find(i => i.id === id);
+  if (x && !canDelete(x)) { toast('Only the owner can delete a shared task.'); return; }
   if (pendingDelete !== id) {
     pendingDelete = id;
     if (btn) { btn.classList.add('confirm'); btn.title = 'Tap again to delete'; }
@@ -297,6 +323,8 @@ function requestDelete(id, btn) {
   deleteItem(id);
 }
 function deleteItem(id) {
+  const existing = items.find(x => x.id === id);
+  if (existing && !canDelete(existing)) { toast('Only the owner can delete a shared task.'); pendingDelete = null; refresh(); return; }
   const i = items.findIndex(x => x.id === id);
   if (i >= 0) items.splice(i, 1);
   pendingDelete = null;
@@ -571,6 +599,8 @@ function dayRowHtml(x, dateStr) {
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
   if (x.context) meta.push(ctxChipHtml(x.context));
   if (x.estimate) meta.push(`<span class="meta-chip">⏱ ${escapeHtml(x.estimate)}</span>`);
+  if (checklistProgressChip(x)) meta.push(checklistProgressChip(x));
+  if (sharedChip(x)) meta.push(sharedChip(x));
   return `<div class="row week-task-row">
       <button class="check-circle ${done ? 'done' : ''}" data-check="${x.id}" aria-label="Toggle done">${done ? ICON_CHECK : ''}</button>
       <div class="row-body" data-body="${x.id}">
@@ -600,7 +630,7 @@ export function renderGoals() {
   el.querySelectorAll('[data-goaltitle]').forEach(b => b.addEventListener('click', e => openPlannerEditor(e.currentTarget.getAttribute('data-goaltitle'))));
   el.querySelectorAll('[data-goalcheck]').forEach(b => b.addEventListener('click', e => {
     const g = items.find(x => x.id === e.currentTarget.getAttribute('data-goalcheck'));
-    if (g) { g.finished = !g.finished; g.finishedDate = g.finished ? TODAY() : null; save(); refresh(); }
+    if (g && canEdit(g)) { g.finished = !g.finished; g.finishedDate = g.finished ? TODAY() : null; save(); refresh(); }
   }));
   el.querySelectorAll('[data-check]').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation(); toggleCompleteOn(e.currentTarget.getAttribute('data-check'), TODAY());
@@ -694,6 +724,12 @@ export function renderInbox() {
 
   let html = contextFilterHtml();
 
+  if (receivedInvites.length) {
+    html += `<div class="section-title">Shared with you</div><div class="group">`;
+    html += receivedInvites.map(inviteRowHtml).join('');
+    html += `</div>`;
+  }
+
   const pending = drafts();
   if (pending.length) {
     html += `<div class="section-title">From your diary &nbsp;&middot;&nbsp; not finished</div><div class="group">`;
@@ -721,6 +757,35 @@ export function renderInbox() {
     const x = items.find(i => i.id === e.currentTarget.getAttribute('data-movetom'));
     if (x) { x.date = addDays(TODAY(), 1); save(); refresh(); }
   }));
+  el.querySelectorAll('[data-inviteaccept]').forEach(b => b.addEventListener('click', e => respondInvite(e.currentTarget.getAttribute('data-inviteaccept'), true)));
+  el.querySelectorAll('[data-invitedecline]').forEach(b => b.addEventListener('click', e => respondInvite(e.currentTarget.getAttribute('data-invitedecline'), false)));
+}
+
+function inviteRowHtml(i) {
+  const kindHint = i.share_kind === 'delegate' ? "it's now your job to do"
+    : i.share_kind === 'collaborate' ? 'you can both edit it'
+    : 'view only, watching their progress';
+  return `<div class="row invite-row">
+      <div class="row-body">
+        <div class="row-title">${escapeHtml(i.item_title || 'A task')}</div>
+        <div class="row-notes">${escapeHtml(i.from_username || 'Someone')} wants to ${shareKindLabel(i.share_kind).toLowerCase()} &middot; ${kindHint}</div>
+      </div>
+      <button class="link" data-inviteaccept="${i.id}" type="button">Accept</button>
+      <button class="link danger" data-invitedecline="${i.id}" type="button">Decline</button>
+    </div>`;
+}
+
+async function respondInvite(inviteId, accept) {
+  receivedInvites = receivedInvites.filter(i => i.id !== inviteId);
+  refresh();
+  try {
+    await respondToInvite(inviteId, accept);
+    if (accept) { await loadItems(); refresh(); toast('Added to your planner.'); }
+  } catch {
+    toast('Could not answer that invite - try again.');
+    await loadInvites();
+    refresh();
+  }
 }
 
 function draftRowHtml(x) {
@@ -742,14 +807,16 @@ function inboxRowHtml(x) {
   const meta = [];
   if (x.context) meta.push(ctxChipHtml(x.context));
   if (x.estimate) meta.push(`<span class="meta-chip">&#9201; ${escapeHtml(x.estimate)}</span>`);
+  if (checklistProgressChip(x)) meta.push(checklistProgressChip(x));
+  if (sharedChip(x)) meta.push(sharedChip(x));
   return `<div class="row">
       <div class="row-body" data-body="${x.id}">
         <div class="row-title">${escapeHtml(x.title)}</div>
         ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
       </div>
-      <button class="link" data-movetoday="${x.id}" type="button">Today</button>
-      <button class="link" data-movetom="${x.id}" type="button">Tomorrow</button>
-      <button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>
+      ${canEdit(x) ? `<button class="link" data-movetoday="${x.id}" type="button">Today</button>
+      <button class="link" data-movetom="${x.id}" type="button">Tomorrow</button>` : ''}
+      ${canDelete(x) ? `<button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>` : ''}
     </div>`;
 }
 
@@ -757,11 +824,94 @@ function inboxRowHtml(x) {
 
 function newTask(over = {}) {
   return {
-    id: uid(), kind: 'task', title: '', notes: '', estimate: '', date: '', time: '', recurring: 'none', repeatDays: [], doneDates: [], priority: DEFAULT_QUADRANT, timeLocked: false,
+    id: uid(), kind: 'task', title: '', notes: '', notesMode: 'text', checklist: [], estimate: '', date: '', time: '', recurring: 'none', repeatDays: [], doneDates: [], priority: DEFAULT_QUADRANT, timeLocked: false,
     flagged: false, context: '', completed: false, lastCompletedDate: null, goalId: null,
     startedDate: '', lastTouchedDate: '', deadline: '', finished: false, finishedDate: null,
     order: Date.now(), createdAt: Date.now(), ...over,
   };
+}
+
+/* ===================== description field: notes or checklist ===================== */
+
+function descModeToggleHtml(mode) {
+  return `<div class="desc-mode-toggle">
+      <button class="desc-mode-btn ${mode !== 'checklist' ? 'is-on' : ''}" data-descmode="text" type="button">Notes</button>
+      <button class="desc-mode-btn ${mode === 'checklist' ? 'is-on' : ''}" data-descmode="checklist" type="button">Checklist</button>
+    </div>`;
+}
+function checklistBodyHtml(list) {
+  return `<div class="checklist">
+      ${list.map((it, i) => `<div class="checklist-row">
+          <button class="check-circle ${it.done ? 'done' : ''}" data-clcheck="${i}" type="button">${it.done ? ICON_CHECK : ''}</button>
+          <span class="checklist-text ${it.done ? 'done' : ''}">${escapeHtml(it.text)}</span>
+          <button class="row-del" data-cldel="${i}" aria-label="Remove">${ICON_TRASH}</button>
+        </div>`).join('')}
+      <input type="text" class="tag-input checklist-add" placeholder="Add an item, then Enter">
+    </div>`;
+}
+function descFieldHtml(desc, placeholder) {
+  const mode = desc.mode === 'checklist' ? 'checklist' : 'text';
+  const body = mode === 'checklist'
+    ? checklistBodyHtml(desc.checklist)
+    : `<textarea class="sheet-notes" placeholder="${placeholder}" maxlength="2000">${escapeHtml(desc.notes || '')}</textarea>`;
+  return descModeToggleHtml(mode) + body;
+}
+
+/**
+ * Wires the Notes/Checklist switch into `wrap`. `desc` (`{ mode, notes, checklist }`)
+ * is mutated in place, so a save handler elsewhere can read it back at any time
+ * via `descFieldValue` without this module needing to track it separately.
+ */
+function wireDescField(wrap, desc, placeholder) {
+  function draw() {
+    wrap.innerHTML = descFieldHtml(desc, placeholder);
+    wrap.querySelectorAll('[data-descmode]').forEach(b => b.addEventListener('click', e => {
+      if (desc.mode !== 'checklist') { const ta = wrap.querySelector('.sheet-notes'); if (ta) desc.notes = ta.value; }
+      desc.mode = e.currentTarget.getAttribute('data-descmode');
+      draw();
+    }));
+    wrap.querySelectorAll('[data-clcheck]').forEach(b => b.addEventListener('click', e => {
+      const item = desc.checklist[Number(e.currentTarget.getAttribute('data-clcheck'))];
+      item.done = !item.done;
+      draw();
+    }));
+    wrap.querySelectorAll('[data-cldel]').forEach(b => b.addEventListener('click', e => {
+      desc.checklist.splice(Number(e.currentTarget.getAttribute('data-cldel')), 1);
+      draw();
+    }));
+    const addInput = wrap.querySelector('.checklist-add');
+    addInput?.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      const text = addInput.value.trim();
+      if (!text) return;
+      desc.checklist.push({ text, done: false });
+      draw();
+      wrap.querySelector('.checklist-add')?.focus();
+    });
+  }
+  draw();
+}
+
+/** Read back whatever is currently in the field, straight from the live DOM where it matters. */
+function descFieldValue(wrap, desc) {
+  if (desc.mode === 'checklist') return { notesMode: 'checklist', notes: '', checklist: desc.checklist.filter(it => it.text) };
+  const ta = wrap.querySelector('.sheet-notes');
+  return { notesMode: 'text', notes: (ta ? ta.value : (desc.notes || '')).trim(), checklist: [] };
+}
+
+/** A small marker on rows that aren't fully yours to edit. */
+function sharedChip(x) {
+  const role = x.role || 'owner';
+  if (role === 'viewer') return `<span class="meta-chip shared-chip">&#128274; view only</span>`;
+  if (role === 'editor') return `<span class="meta-chip shared-chip">&#128101; shared</span>`;
+  return '';
+}
+
+/** How many of a checklist's items are ticked, for the row-meta chip. */
+function checklistProgressChip(x) {
+  if (!Array.isArray(x.checklist) || !x.checklist.length) return '';
+  const done = x.checklist.filter(it => it.done).length;
+  return `<span class="meta-chip checklist-chip">&#9744; ${done}/${x.checklist.length}</span>`;
 }
 
 /** Show the weekday row only while "chosen days" is selected. */
@@ -777,27 +927,43 @@ function bindRepeatToggle(selectId, wrapId) {
 /* ===================== capture sheet ===================== */
 
 let capArea = null;
+let capDesc = { mode: 'text', notes: '', checklist: [] };
 
-const CAP_AREAS = () => [
-  { id: 'today', label: '☀️ Today' },
-  { id: 'week', label: '📅 Schedule' },
-  { id: 'ongoing', label: '⚡ Ongoing' },
-  { id: 'goal', label: '🚩 Goal' },
-  { id: 'inbox', label: '📥 Inbox' },
-  { id: 'diary', label: '📔 Diary' },
+// Grouped so the picker reads as "when" vs "what kind" instead of six equal
+// buttons in one wall - Today/Schedule/Inbox are the same thing (a task)
+// with a different date, Ongoing/Goal/Diary are genuinely different kinds.
+const CAP_AREA_GROUPS = () => [
+  { label: 'Task', areas: [
+    { id: 'today', label: '☀️ Today' },
+    { id: 'week', label: '📅 Schedule' },
+    { id: 'inbox', label: '📥 Inbox' },
+  ] },
+  { label: 'Other', areas: [
+    { id: 'ongoing', label: '⚡ Ongoing' },
+    { id: 'goal', label: '🚩 Goal' },
+    { id: 'diary', label: '📔 Diary' },
+  ] },
 ];
+
+function capAreaGridHtml() {
+  return CAP_AREA_GROUPS().map(g => `<div class="cap-area-group">
+      <div class="cap-area-group-label">${g.label}</div>
+      <div class="cap-area-grid">
+        ${g.areas.map(a => `<button class="cap-area-btn ${capArea === a.id ? 'active' : ''}" data-area="${a.id}" type="button">${a.label}</button>`).join('')}
+      </div>
+    </div>`).join('');
+}
 
 export function openCaptureSheet(preferred) {
   capArea = preferred || null;
+  capDesc = { mode: 'text', notes: '', checklist: [] };
   sheetEl().innerHTML = `
     <div class="sheet-handle"></div>
-    <div class="sheet-title">New item</div>
+    <div class="sheet-title">New task</div>
     <input type="text" id="capTitle" placeholder="What needs doing?">
-    <textarea id="capNotes" class="sheet-notes" placeholder="Add a description (optional)…" maxlength="2000"></textarea>
+    <div id="capDescWrap"></div>
     <div class="cap-area-label">Where does this go?</div>
-    <div class="cap-area-grid">
-      ${CAP_AREAS().map(a => `<button class="cap-area-btn ${capArea === a.id ? 'active' : ''}" data-area="${a.id}" type="button">${a.label}</button>`).join('')}
-    </div>
+    ${capAreaGridHtml()}
     <div id="capExtra">${capExtraHtml()}</div>
     <div class="sheet-actions">
       <button class="sheet-cancel" id="capCancel" type="button">Cancel</button>
@@ -805,6 +971,7 @@ export function openCaptureSheet(preferred) {
     </div>`;
 
   $('capCancel').addEventListener('click', closeSheet);
+  wireDescField($('capDescWrap'), capDesc, 'Add a description (optional)…');
   document.querySelectorAll('[data-area]').forEach(b => b.addEventListener('click', e => {
     capArea = e.currentTarget.getAttribute('data-area');
     document.querySelectorAll('[data-area]').forEach(x => x.classList.toggle('active', x.getAttribute('data-area') === capArea));
@@ -892,7 +1059,7 @@ function submitCapture() {
   const flagged = $('capFlag') ? $('capFlag').dataset.on === '1' : false;
   const context = $('capContext') ? $('capContext').value : '';
   const repeatDays = recurring === 'days' ? getDayToggles('capDays') : [];
-  const notes = $('capNotes') ? $('capNotes').value.trim() : '';
+  const { notes, notesMode, checklist } = descFieldValue($('capDescWrap'), capDesc);
   const estimate = getEstimatePickerValue('capEstimate');
 
   if (capArea === 'diary') {
@@ -902,15 +1069,15 @@ function submitCapture() {
   }
 
   if (capArea === 'today') {
-    items.push(newTask({ title, notes, estimate, date: TODAY(), time, recurring, repeatDays, flagged, context }));
+    items.push(newTask({ title, notes, notesMode, checklist, estimate, date: TODAY(), time, recurring, repeatDays, flagged, context }));
   } else if (capArea === 'week') {
-    items.push(newTask({ title, notes, estimate, date: getDateStripValue('capWeekDay') || addDays(TODAY(), 1), time, recurring, repeatDays, flagged, context }));
+    items.push(newTask({ title, notes, notesMode, checklist, estimate, date: getDateStripValue('capWeekDay') || addDays(TODAY(), 1), time, recurring, repeatDays, flagged, context }));
   } else if (capArea === 'inbox') {
-    items.push(newTask({ title, notes, context }));
+    items.push(newTask({ title, notes, notesMode, checklist, context }));
   } else if (capArea === 'ongoing') {
-    items.push(newTask({ title, notes, estimate, kind: 'ongoing', context, startedDate: TODAY(), lastTouchedDate: TODAY() }));
+    items.push(newTask({ title, notes, notesMode, checklist, estimate, kind: 'ongoing', context, startedDate: TODAY(), lastTouchedDate: TODAY() }));
   } else if (capArea === 'goal') {
-    items.push(newTask({ title, notes, kind: 'goal', deadline: getDateStripValue('capDeadline') || addDays(TODAY(), 14) }));
+    items.push(newTask({ title, notes, notesMode, checklist, kind: 'goal', deadline: getDateStripValue('capDeadline') || addDays(TODAY(), 14) }));
   }
   save();
   refresh();
@@ -919,28 +1086,74 @@ function submitCapture() {
 
 /* ===================== editor sheet ===================== */
 
+let editDesc = { mode: 'text', notes: '', checklist: [] };
+
 export function openPlannerEditor(id) {
   const x = items.find(i => i.id === id);
   if (!x) return;
-  sheetEl().innerHTML = editorHtml(x);
-  wireEditor(x);
+  const role = x.role || 'owner';
+  if (role === 'viewer') {
+    sheetEl().innerHTML = viewerEditorHtml(x);
+    $('sheetCancel').addEventListener('click', closeSheet);
+    openSheet();
+    return;
+  }
+  editDesc = { mode: x.notesMode === 'checklist' ? 'checklist' : 'text', notes: x.notes || '', checklist: (x.checklist || []).map(it => ({ ...it })) };
+  sheetEl().innerHTML = editorHtml(x, role);
+  wireDescField($('editDescWrap'), editDesc, 'More detail or explanation…');
+  wireEditor(x, role);
   openSheet();
 }
 
-function notesFieldHtml(x) {
-  return `<textarea id="editNotes" class="sheet-notes" placeholder="More detail or explanation…" maxlength="2000">${escapeHtml(x.notes || '')}</textarea>`;
+function notesFieldHtml() {
+  return `<div id="editDescWrap"></div>`;
 }
 
-function editorHtml(x) {
-  const actions = `<div class="sheet-actions">
+/** Someone else's task, shared as view-only - a compact read-only card instead of the edit form. */
+function viewerEditorHtml(x) {
+  const meta = [];
+  if (x.kind === 'task') {
+    if (x.date) meta.push(fmtMonthDay(x.date));
+    if (x.time) meta.push(fmtTime(x.time));
+    if (x.context) meta.push(x.context);
+  }
+  if (x.kind === 'goal' && x.deadline) meta.push(`Due ${fmtMonthDay(x.deadline)}`);
+  if (x.estimate) meta.push(x.estimate);
+  const done = x.kind === 'task' ? isDoneOnDate(x, x.date || TODAY()) : !!x.finished;
+
+  const body = x.notesMode === 'checklist' && x.checklist?.length
+    ? `<div class="checklist">${x.checklist.map(it => `<div class="checklist-row">
+          <span class="check-circle ${it.done ? 'done' : ''}" style="cursor:default;">${it.done ? ICON_CHECK : ''}</span>
+          <span class="checklist-text ${it.done ? 'done' : ''}">${escapeHtml(it.text)}</span>
+        </div>`).join('')}</div>`
+    : (x.notes ? `<div class="row-notes" style="white-space:normal;margin-bottom:12px;">${escapeHtml(x.notes)}</div>` : '');
+
+  return `<div class="sheet-handle"></div>
+    <div class="share-banner">&#128274; Shared with you &middot; view only</div>
+    <div class="sheet-title">${escapeHtml(x.title)}</div>
+    ${meta.length ? `<div class="row-meta" style="margin-bottom:12px;">${meta.map(m => `<span class="meta-chip">${escapeHtml(m)}</span>`).join('')}</div>` : ''}
+    ${body}
+    <p class="sheet-hint">${done ? `${ICON_CHECK} Marked done.` : 'Not finished yet.'}</p>
+    <div class="sheet-actions"><button class="sheet-cancel" id="sheetCancel" type="button">Close</button></div>`;
+}
+
+function editorActionsHtml(role) {
+  return `<div class="sheet-actions">
       <button class="sheet-cancel" id="sheetCancel" type="button">Cancel</button>
-      <button class="sheet-delete" id="sheetDelete" type="button">Delete</button>
+      ${role === 'owner' ? `<button class="sheet-delete" id="sheetDelete" type="button">Delete</button>` : ''}
       <button class="sheet-save" id="sheetSave" type="button">Save</button>
     </div>`;
+}
+
+function editorHtml(x, role) {
+  const actions = editorActionsHtml(role);
+  const shareBtn = role === 'owner' ? `<button class="link share-btn" id="openShare" type="button">&#128279; Share</button>` : '';
+  const banner = role === 'editor' ? `<div class="share-banner">&#128101; Shared with you &middot; you can edit, not delete</div>` : '';
 
   if (x.kind === 'goal') {
     return `<div class="sheet-handle"></div>
-      <div class="sheet-title">Edit goal</div>
+      <div class="sheet-title-row"><div class="sheet-title">Edit goal</div>${shareBtn}</div>
+      ${banner}
       <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
       ${notesFieldHtml(x)}
       <div class="fname" style="margin-bottom:8px;">Deadline</div>
@@ -949,7 +1162,8 @@ function editorHtml(x) {
   }
   if (x.kind === 'ongoing') {
     return `<div class="sheet-handle"></div>
-      <div class="sheet-title">Edit project</div>
+      <div class="sheet-title-row"><div class="sheet-title">Edit project</div>${shareBtn}</div>
+      ${banner}
       <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
       ${notesFieldHtml(x)}
       <div class="field-group">
@@ -963,7 +1177,8 @@ function editorHtml(x) {
       ${actions}`;
   }
   return `<div class="sheet-handle"></div>
-    <div class="sheet-title">Edit task</div>
+    <div class="sheet-title-row"><div class="sheet-title">Edit task</div>${shareBtn}</div>
+    ${banner}
     <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
     ${notesFieldHtml(x)}
     <div class="sheet-move-row">
@@ -1007,9 +1222,10 @@ function editorHtml(x) {
     ${actions}`;
 }
 
-function wireEditor(x) {
+function wireEditor(x, role) {
   $('sheetCancel').addEventListener('click', closeSheet);
-  $('sheetDelete').addEventListener('click', () => { deleteItem(x.id); closeSheet(); });
+  $('sheetDelete')?.addEventListener('click', () => { deleteItem(x.id); closeSheet(); });
+  $('openShare')?.addEventListener('click', () => openShareView(x));
 
   if (x.kind === 'goal') wireDateStrip('editDeadline', x.deadline || TODAY(), TODAY());
 
@@ -1039,8 +1255,10 @@ function wireEditor(x) {
     if (!title) { $('editTitle').focus(); return; }
     x.title = title;
     x.draft = false;   // editing and saving is what finishes a draft
-    const notes = $('editNotes');
-    if (notes) x.notes = notes.value.trim();
+    const { notes, notesMode, checklist } = descFieldValue($('editDescWrap'), editDesc);
+    x.notes = notes;
+    x.notesMode = notesMode;
+    x.checklist = checklist;
     if (x.kind === 'goal') {
       x.deadline = getDateStripValue('editDeadline') || x.deadline;
     } else if (x.kind === 'task') {
@@ -1059,6 +1277,65 @@ function wireEditor(x) {
     refresh();
     closeSheet();
   });
+}
+
+/* ===================== share sheet ===================== */
+
+const SHARE_KINDS = [
+  { id: 'delegate', label: 'Delegate', hint: "It's their job now — they edit and complete it, you just watch their progress." },
+  { id: 'collaborate', label: 'Collaborate', hint: 'You both can edit it and tick things off.' },
+  { id: 'view', label: 'Share progress', hint: "They can see it and how far you've gotten, but can't change anything." },
+];
+function shareKindLabel(k) { return SHARE_KINDS.find(s => s.id === k)?.label || k; }
+
+function shareViewHtml(x, invites) {
+  const pending = invites.filter(i => i.item_id === x.id && i.status === 'pending');
+  return `<div class="sheet-handle"></div>
+    <div class="sheet-title">Share &ldquo;${escapeHtml(x.title)}&rdquo;</div>
+    <input type="text" id="shareUsername" placeholder="Their username">
+    <div class="share-kind-list">
+      ${SHARE_KINDS.map((k, i) => `<label class="share-kind-row">
+          <input type="radio" name="shareKind" value="${k.id}" ${i === 1 ? 'checked' : ''}>
+          <span class="share-kind-body"><span class="share-kind-label">${k.label}</span><span class="share-kind-hint">${k.hint}</span></span>
+        </label>`).join('')}
+    </div>
+    ${pending.length ? `<div class="cap-area-label">Waiting to be accepted</div><div class="group">
+        ${pending.map(i => `<div class="row">
+            <div class="row-body">
+              <div class="row-title">${escapeHtml(i.to_username || 'someone')}</div>
+              <div class="row-meta"><span class="meta-chip">${shareKindLabel(i.share_kind)}</span></div>
+            </div>
+            <button class="link" data-cancelinvite="${i.id}" type="button">Cancel</button>
+          </div>`).join('')}
+      </div>` : ''}
+    <div class="sheet-actions">
+      <button class="sheet-cancel" id="shareBack" type="button">Back</button>
+      <button class="sheet-save" id="shareSend" type="button">Send invite</button>
+    </div>`;
+}
+
+async function openShareView(x) {
+  let invites = [];
+  try { invites = await myInvites(); } catch { /* best effort - the list just starts empty */ }
+  sheetEl().innerHTML = shareViewHtml(x, invites);
+
+  $('shareBack').addEventListener('click', () => openPlannerEditor(x.id));
+  $('shareSend').addEventListener('click', async () => {
+    const toUsername = $('shareUsername').value.trim();
+    if (!toUsername) { $('shareUsername').focus(); return; }
+    const shareKind = sheetEl().querySelector('input[name="shareKind"]:checked')?.value || 'collaborate';
+    try {
+      await sendInvite({ itemId: x.id, toUsername, shareKind });
+      toast(`Invite sent to ${toUsername} — waiting for them to accept.`);
+      openShareView(x);
+    } catch (e) {
+      toast(e.message || 'Could not send that invite.');
+    }
+  });
+  sheetEl().querySelectorAll('[data-cancelinvite]').forEach(b => b.addEventListener('click', async e => {
+    try { await cancelInvite(e.currentTarget.getAttribute('data-cancelinvite')); openShareView(x); }
+    catch { toast('Could not cancel that invite.'); }
+  }));
 }
 
 /* Search results are delegated, because the list is rebuilt as you type. */

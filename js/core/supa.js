@@ -109,6 +109,58 @@ export async function myHandle() {
   return data;
 }
 
+export async function currentUserId() {
+  const { data: { user } } = await supa().auth.getUser();
+  return user?.id ?? null;
+}
+
+/* ----------------------------- sharing ---------------------------- */
+// Delegate / Collaborate / Share progress - see migration 015. Every share
+// waits for an accept; nothing here grants access on its own.
+
+/** Resolve a username to an account id. Null if no such account exists. */
+export async function userIdForHandle(username) {
+  const { data, error } = await supa().rpc('user_id_for_handle', { name: username });
+  if (error) throw error;
+  return data || null;
+}
+
+/** `shareKind` is 'delegate' | 'collaborate' | 'view'. Throws with a message fit to show. */
+export async function sendInvite({ itemId, toUsername, shareKind }) {
+  const toUserId = await userIdForHandle(toUsername);
+  if (!toUserId) throw new Error(`No account is named "${toUsername}".`);
+  const { data: { user } } = await supa().auth.getUser();
+  if (toUserId === user?.id) throw new Error("That's your own account.");
+  const { error } = await supa().from('planner_invites').insert({
+    item_id: itemId, to_user_id: toUserId, share_kind: shareKind,
+  });
+  if (error) {
+    if (error.code === '23505') throw new Error('Already invited.');
+    throw error;
+  }
+}
+
+/** Every invite you have sent or received, whatever its status. */
+export async function myInvites() {
+  const { data, error } = await supa()
+    .from('planner_invites')
+    .select('id, item_id, item_title, from_user_id, from_username, to_user_id, to_username, share_kind, status, created_at')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function respondToInvite(inviteId, accept) {
+  const { error } = await supa().rpc('respond_to_invite', { invite_id: inviteId, accept });
+  if (error) throw error;
+}
+
+/** Only works while the invite you sent is still pending. */
+export async function cancelInvite(inviteId) {
+  const { error } = await supa().from('planner_invites').delete().eq('id', inviteId);
+  if (error) throw error;
+}
+
 /* ----------------------------- entries ---------------------------- */
 
 const ENTRY_COLS = 'id, entry_date, text, sections, audio_path, lat, lng, place, accuracy, tags, created_at, updated_at';
