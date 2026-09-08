@@ -187,26 +187,39 @@ function wireChrome() {
   }, 60000);
 }
 
-/** The planner's press effect: rows dip slightly on pointer-down. */
+/**
+ * The planner's press effect: rows dip slightly on pointer-down.
+ *
+ * The up/cancel listeners used to be added fresh per pointerdown and removed
+ * by themselves on release. If a touch was ever interrupted without either
+ * event firing (iOS drops this occasionally), the pair stayed on `window`
+ * forever - and every later tap-release anywhere in the app would replay all
+ * of them, one more each time a touch got dropped. A single persistent pair
+ * with the pressed row tracked in a closure can't accumulate.
+ */
 function wirePressFeedback() {
+  let pressedRow = null;
+  const release = () => {
+    const row = pressedRow;
+    pressedRow = null;
+    if (!row) return;
+    const back = new Spring(0.985, { dampingRatio: 0.8, response: 0.22 });
+    back.set(1);
+    runSpring(back,
+      v => { if (!row.style.transform.includes('translateX')) row.style.transform = `scale(${v})`; },
+      () => { if (!row.style.transform.includes('translateX')) row.style.transform = ''; });
+  };
   document.addEventListener('pointerdown', e => {
     const row = e.target.closest('.row, .ongoing-row, .goal-card, .month-cell');
     if (!row || row.style.transform.includes('translateX')) return;
+    if (pressedRow && pressedRow !== row) release();
+    pressedRow = row;
     const down = new Spring(1, { dampingRatio: 1, response: 0.15 });
     down.set(0.985);
     runSpring(down, v => { if (!row.style.transform.includes('translateX')) row.style.transform = `scale(${v})`; });
-    const up = () => {
-      const back = new Spring(0.985, { dampingRatio: 0.8, response: 0.22 });
-      back.set(1);
-      runSpring(back,
-        v => { if (!row.style.transform.includes('translateX')) row.style.transform = `scale(${v})`; },
-        () => { if (!row.style.transform.includes('translateX')) row.style.transform = ''; });
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
-    };
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
   });
+  window.addEventListener('pointerup', release);
+  window.addEventListener('pointercancel', release);
 }
 
 function switchScreen(name, seed) {

@@ -500,10 +500,12 @@ function openDayDetail(dateStr) {
     <div class="group" style="margin-bottom:14px;">
       ${dayItems.length ? dayItems.map(x => dayRowHtml(x, dateStr)).join('') : `<div class="empty-note">Nothing planned.</div>`}
     </div>
-    <button class="sheet-move-btn" id="dayDiaryBtn" type="button" style="width:100%;margin-bottom:10px;">
-      ${hasDiary ? '✎ Open this day in the diary' : '✎ Write a diary entry for this day'}
-    </button>
-    <div class="sheet-actions"><button class="sheet-cancel" id="dayClose" type="button">Close</button></div>`;
+    <div class="day-sheet-footer">
+      <button class="sheet-move-btn" id="dayDiaryBtn" type="button" style="width:100%;margin-bottom:10px;">
+        ${hasDiary ? '✎ Open this day in the diary' : '✎ Write a diary entry for this day'}
+      </button>
+      <div class="sheet-actions"><button class="sheet-cancel" id="dayClose" type="button">Close</button></div>
+    </div>`;
 
   $('dayClose').addEventListener('click', closeSheet);
   sheetEl().querySelectorAll('[data-goaldue]').forEach(b => b.addEventListener('click', e =>
