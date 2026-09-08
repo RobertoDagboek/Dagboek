@@ -37,6 +37,26 @@ on conflict (item_id, user_id) do nothing;
 
 alter table public.planner_item_members enable row level security;
 
+-- A policy on planner_item_members cannot query planner_item_members itself
+-- in its own USING clause - Postgres detects that as infinite recursion and
+-- refuses to run it (this is what broke the first version of this migration:
+-- "infinite recursion detected in policy for relation planner_item_members").
+-- Routing the membership check through a security-definer function sidesteps
+-- it: the function runs as its owner, who (being the table's owner too) is
+-- exempt from RLS, so the check inside it does not re-trigger the policy.
+-- Every other policy below that needs to know "am I on this item, and as
+-- what" goes through the same function, for the same reason.
+create or replace function public.planner_role(item_id_in text)
+returns text
+language sql security definer stable set search_path = public
+as $$
+  select role from public.planner_item_members
+  where item_id = item_id_in and user_id = auth.uid();
+$$;
+
+revoke all on function public.planner_role(text) from public;
+grant execute on function public.planner_role(text) to authenticated;
+
 -- Only select is exposed to clients directly - who has an item and at what
 -- role goes through respond_to_invite() below, never a raw insert/update
 -- from the browser. That is what stops one account handing itself another
@@ -46,10 +66,7 @@ create policy "see members of your items" on public.planner_item_members
   for select
   using (
     user_id = auth.uid()
-    or exists (
-      select 1 from public.planner_item_members me
-      where me.item_id = planner_item_members.item_id and me.user_id = auth.uid()
-    )
+    or public.planner_role(item_id) is not null
   );
 
 -- ---------- planner_items: membership replaces "only its creator" ----------
@@ -59,10 +76,7 @@ drop policy if exists "own planner" on public.planner_items;
 drop policy if exists "planner select" on public.planner_items;
 create policy "planner select" on public.planner_items
   for select
-  using (exists (
-    select 1 from public.planner_item_members m
-    where m.item_id = id and m.user_id = auth.uid()
-  ));
+  using (public.planner_role(id) is not null);
 
 drop policy if exists "planner insert" on public.planner_items;
 create policy "planner insert" on public.planner_items
@@ -72,22 +86,13 @@ create policy "planner insert" on public.planner_items
 drop policy if exists "planner update" on public.planner_items;
 create policy "planner update" on public.planner_items
   for update
-  using (exists (
-    select 1 from public.planner_item_members m
-    where m.item_id = id and m.user_id = auth.uid() and m.role in ('owner', 'editor')
-  ))
-  with check (exists (
-    select 1 from public.planner_item_members m
-    where m.item_id = id and m.user_id = auth.uid() and m.role in ('owner', 'editor')
-  ));
+  using (public.planner_role(id) in ('owner', 'editor'))
+  with check (public.planner_role(id) in ('owner', 'editor'));
 
 drop policy if exists "planner delete" on public.planner_items;
 create policy "planner delete" on public.planner_items
   for delete
-  using (exists (
-    select 1 from public.planner_item_members m
-    where m.item_id = id and m.user_id = auth.uid() and m.role = 'owner'
-  ));
+  using (public.planner_role(id) = 'owner');
 
 -- Creating an item makes you its owner automatically - the client never
 -- writes planner_item_members directly.
@@ -195,10 +200,7 @@ create policy "send invites for items you own" on public.planner_invites
   with check (
     from_user_id = auth.uid()
     and to_user_id <> auth.uid()
-    and exists (
-      select 1 from public.planner_item_members m
-      where m.item_id = planner_invites.item_id and m.user_id = auth.uid() and m.role = 'owner'
-    )
+    and public.planner_role(item_id) = 'owner'
   );
 
 -- Cancelling is just deleting your own still-pending invite.
