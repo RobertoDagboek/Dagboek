@@ -710,9 +710,9 @@ function goalCardHtml(g) {
             </div>
           </div>`).join('')}</div>
       </div>` : ''}
-      ${goalAddOpenId === g.id
+      ${canEdit(g) ? (goalAddOpenId === g.id
         ? `<input type="text" class="tag-input" data-goaltaskinput="${g.id}" placeholder="Task title, then Enter">`
-        : `<button class="goal-add-task" data-goaladdtask="${g.id}" type="button">+ Add a task toward this</button>`}
+        : `<button class="goal-add-task" data-goaladdtask="${g.id}" type="button">+ Add a task toward this</button>`) : ''}
     </div>`;
 }
 
@@ -1309,7 +1309,7 @@ function shareViewHtml(x, invites) {
           </div>`).join('')}
       </div>` : ''}
     <div class="sheet-actions">
-      <button class="sheet-cancel" id="shareBack" type="button">Back</button>
+      <button class="sheet-cancel" id="shareDone" type="button">Done</button>
       <button class="sheet-save" id="shareSend" type="button">Send invite</button>
     </div>`;
 }
@@ -1319,7 +1319,9 @@ async function openShareView(x) {
   try { invites = await myInvites(); } catch { /* best effort - the list just starts empty */ }
   sheetEl().innerHTML = shareViewHtml(x, invites);
 
-  $('shareBack').addEventListener('click', () => openPlannerEditor(x.id));
+  // Closes outright rather than looping back into the edit form - from here
+  // "Back" read like the only way out was "Cancel" the task itself.
+  $('shareDone').addEventListener('click', closeSheet);
   $('shareSend').addEventListener('click', async () => {
     const toUsername = $('shareUsername').value.trim();
     if (!toUsername) { $('shareUsername').focus(); return; }

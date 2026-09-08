@@ -14,7 +14,7 @@ import {
   $, escapeHtml, todayStr, fmtDateFull, fmtTime,
   sheetEl, openSheet, closeSheet, refresh, ICON_CHECK,
 } from '../core/ui.js';
-import { appliesOnDate, goalsDueOn, todayOrder, isDoneOnDate } from './planner.js';
+import { appliesOnDate, goalsDueOn, todayOrder, isDoneOnDate, canEdit } from './planner.js';
 import { QUADRANTS, quadrant, matrixKeyHtml, DEFAULT_QUADRANT } from './priority.js';
 import { syncPrefs } from '../core/push.js';
 
@@ -109,7 +109,7 @@ export function openBriefing(today = todayStr()) {
     sheetEl().querySelectorAll('[data-prio]').forEach(b => b.addEventListener('click', e => {
       const el = e.currentTarget;
       const task = items.find(i => i.id === el.getAttribute('data-prio'));
-      if (!task) return;
+      if (!task || !canEdit(task)) return;
       task.priority = Number(el.getAttribute('data-value'));
       saveItems();
       draw();
@@ -145,11 +145,11 @@ function rowHtml(x, today) {
           ${x.estimate ? `<span class="meta-chip">&#9201; ${escapeHtml(x.estimate)}</span>` : ''}
           ${done ? `<span class="meta-chip">${ICON_CHECK}</span>` : ''}
         </div>
-        ${done ? '' : `<div class="prio-row">
+        ${!done && canEdit(x) ? `<div class="prio-row">
           ${QUADRANTS.map(q => `<button class="prio-btn ${prio === q.value ? 'is-on' : ''}"
             style="--q:${q.colour}" data-prio="${x.id}" data-value="${q.value}"
             title="${q.hint}" type="button">${q.label}</button>`).join('')}
-        </div>`}
+        </div>`: ''}
       </div>
     </div>`;
 }
