@@ -109,9 +109,10 @@ export async function myHandle() {
   return data;
 }
 
+/** Reads the local session, no network round trip - fine for shaping a query, not for anything security-sensitive. */
 export async function currentUserId() {
-  const { data: { user } } = await supa().auth.getUser();
-  return user?.id ?? null;
+  const { data: { session } } = await supa().auth.getSession();
+  return session?.user?.id ?? null;
 }
 
 /* ----------------------------- sharing ---------------------------- */
@@ -129,8 +130,7 @@ export async function userIdForHandle(username) {
 export async function sendInvite({ itemId, toUsername, shareKind }) {
   const toUserId = await userIdForHandle(toUsername);
   if (!toUserId) throw new Error(`No account is named "${toUsername}".`);
-  const { data: { user } } = await supa().auth.getUser();
-  if (toUserId === user?.id) throw new Error("That's your own account.");
+  if (toUserId === await currentUserId()) throw new Error("That's your own account.");
   const { error } = await supa().from('planner_invites').insert({
     item_id: itemId, to_user_id: toUserId, share_kind: shareKind,
   });

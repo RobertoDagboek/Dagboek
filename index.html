@@ -19,6 +19,38 @@
 </head>
 <body class="no-tabs">
 
+<!-- Temporary diagnostic: shows any uncaught error on screen instead of the
+     app just going quiet, so it can be screenshotted. Registered before
+     anything else loads, so it catches a failure in app.js itself too.
+     Safe to remove once the "stuck when opening a task" bug is found. -->
+<div id="err-panel" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(20,0,0,0.96);color:#fff;padding:20px;overflow:auto;font:13px/1.5 -apple-system,sans-serif;white-space:pre-wrap;"></div>
+<script>
+(function () {
+  var seen = [];
+  function show(line) {
+    seen.push(line);
+    var el = document.getElementById('err-panel');
+    el.textContent = 'Something crashed. Screenshot this and send it.\n\n' + seen.join('\n\n')
+      + '\n\n(tap anywhere to close this panel)';
+    el.style.display = 'block';
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('err-panel').addEventListener('click', function () {
+      this.style.display = 'none';
+    });
+  });
+  window.addEventListener('error', function (e) {
+    show('Error: ' + e.message + '\nAt: ' + (e.filename || '?') + ':' + (e.lineno || '?') + ':' + (e.colno || '?')
+      + (e.error && e.error.stack ? '\n' + e.error.stack : ''));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    show('Unhandled promise rejection: ' + (r && r.message ? r.message : String(r))
+      + (r && r.stack ? '\n' + r.stack : ''));
+  });
+})();
+</script>
+
 <!-- ============ LOCK: username + PIN ============ -->
 <section id="screen-lock" class="lockscreen">
   <div class="lockcard">

@@ -106,9 +106,14 @@ const stamp = t => JSON.stringify(toRow(t));
  */
 async function loadRoles() {
   try {
-    const { data: { user } } = await supa().auth.getUser();
-    if (!user) return new Map();
-    const { data, error } = await supa().from('planner_item_members').select('item_id, role').eq('user_id', user.id);
+    // getSession() reads the already-verified session from local storage -
+    // no network round trip, unlike getUser() (which re-checks with the
+    // server every time). Fine here: this id only shapes which row of an
+    // already-RLS-filtered query we ask for, it grants nothing on its own.
+    const { data: { session } } = await supa().auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) return new Map();
+    const { data, error } = await supa().from('planner_item_members').select('item_id, role').eq('user_id', uid);
     if (error) throw error;
     return new Map((data ?? []).map(m => [m.item_id, m.role]));
   } catch {
@@ -117,9 +122,13 @@ async function loadRoles() {
 }
 
 export async function loadItems() {
-  const { data, error } = await supa().from(TABLE).select(COLUMNS);
+  // Independent queries (different tables, no data dependency) - run them
+  // together rather than paying two sequential round trips.
+  const [{ data, error }, roles] = await Promise.all([
+    supa().from(TABLE).select(COLUMNS),
+    loadRoles(),
+  ]);
   if (error) throw error;
-  const roles = await loadRoles();
   items = (data ?? []).map(r => ({ ...fromRow(r), role: roles.get(r.id) || 'owner' }));
   saved = new Map(items.map(t => [t.id, stamp(t)]));
   return items;

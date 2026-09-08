@@ -267,8 +267,9 @@ function taskRowHtml(x, dateStr) {
     meta.push(`<span class="meta-chip quad" style="--q:${q.colour}">${q.label}</span>`);
   }
   if (x.goalId) meta.push(`<span class="meta-chip goal">goal</span>`);
-  if (checklistProgressChip(x)) meta.push(checklistProgressChip(x));
-  if (sharedChip(x)) meta.push(sharedChip(x));
+  const checklistChip = checklistProgressChip(x), shareChip = sharedChip(x);
+  if (checklistChip) meta.push(checklistChip);
+  if (shareChip) meta.push(shareChip);
   return `<div class="swipe-slot" data-taskslot="${x.id}">
       <div class="swipe-bg">
         <span class="swipe-side left">${ICON_CHECK} Complete</span>
@@ -609,8 +610,9 @@ function dayRowHtml(x, dateStr) {
   if (x.recurring && x.recurring !== 'none') meta.push(`<span class="meta-chip">${recurringLabel(x)}</span>`);
   if (x.context) meta.push(ctxChipHtml(x.context));
   if (x.estimate) meta.push(`<span class="meta-chip">⏱ ${escapeHtml(x.estimate)}</span>`);
-  if (checklistProgressChip(x)) meta.push(checklistProgressChip(x));
-  if (sharedChip(x)) meta.push(sharedChip(x));
+  const checklistChip = checklistProgressChip(x), shareChip = sharedChip(x);
+  if (checklistChip) meta.push(checklistChip);
+  if (shareChip) meta.push(shareChip);
   return `<div class="row week-task-row">
       <button class="check-circle ${done ? 'done' : ''}" data-check="${x.id}" aria-label="Toggle done">${done ? ICON_CHECK : ''}</button>
       <div class="row-body" data-body="${x.id}">
@@ -823,8 +825,9 @@ function inboxRowHtml(x) {
   const meta = [];
   if (x.context) meta.push(ctxChipHtml(x.context));
   if (x.estimate) meta.push(`<span class="meta-chip">&#9201; ${escapeHtml(x.estimate)}</span>`);
-  if (checklistProgressChip(x)) meta.push(checklistProgressChip(x));
-  if (sharedChip(x)) meta.push(sharedChip(x));
+  const checklistChip = checklistProgressChip(x), shareChip = sharedChip(x);
+  if (checklistChip) meta.push(checklistChip);
+  if (shareChip) meta.push(shareChip);
   return `<div class="row">
       <div class="row-body" data-body="${x.id}">
         <div class="row-title">${escapeHtml(x.title)}</div>
