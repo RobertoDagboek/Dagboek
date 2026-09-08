@@ -343,24 +343,31 @@ function attachSwipe(slot, dateStr) {
 
 /* ===================== CALENDAR ===================== */
 
-export function renderWeek() {
-  const el = $('screenContent');
-  let html = `<div class="search-row">
+function weekSearchRowHtml(belowAgenda) {
+  return `<div class="search-row ${belowAgenda ? 'below-agenda' : ''}">
     <span class="search-icon">${ICON_CHEVRON}</span>
     <input type="text" id="weekSearch" data-i18n-ph="search.ph" placeholder="Search tasks, projects, goals…" value="${escapeHtml(searchQuery)}">
     ${searchQuery ? `<button class="search-clear" id="searchClear" type="button">&times;</button>` : ''}
   </div>`;
+}
 
+export function renderWeek() {
+  const el = $('screenContent');
+
+  // While actively searching, the box stays up top with the keyboard and
+  // takes over the screen - the calendar itself doesn't need to be reachable
+  // at the same time.
   if (searchQuery.trim()) {
-    html += renderSearchResultsHtml(searchQuery.trim());
+    const html = weekSearchRowHtml(false) + renderSearchResultsHtml(searchQuery.trim());
     el.innerHTML = html;
     wireSearchBar();
     return;
   }
 
-  html += contextFilterHtml();
+  let html = contextFilterHtml();
   html += renderMonthGridHtml();
   html += `<div class="agenda" id="dayAgenda"></div>`;
+  html += weekSearchRowHtml(true);
   el.innerHTML = html;
   wireSearchBar();
   wireContextFilter(el);
