@@ -99,12 +99,16 @@ function fromRow(r) {
 const stamp = t => JSON.stringify(toRow(t));
 
 /**
- * Which role the current account holds on each item ('owner' | 'editor' |
- * 'viewer'), used to lock editing down for anything shared into your list.
- * Falls back to everyone being 'owner' if migration 015 has not been run
- * yet, so an unshared account keeps working exactly as before.
+ * Two things every item needs from planner_item_members: which role the
+ * current account holds on it ('owner' | 'editor' | 'viewer' - unset falls
+ * back to 'owner', so an unshared account keeps working exactly as before
+ * migration 015), and whether it has more than one member at all (so an
+ * owner can tell their own copy is shared with someone, not just a
+ * recipient's copy of someone else's). RLS already lets a member of an
+ * item see every other row for that same item, so one unfiltered query
+ * gives us both.
  */
-async function loadRoles() {
+async function loadMembership() {
   try {
     // getSession() reads the already-verified session from local storage -
     // no network round trip, unlike getUser() (which re-checks with the
@@ -112,24 +116,34 @@ async function loadRoles() {
     // already-RLS-filtered query we ask for, it grants nothing on its own.
     const { data: { session } } = await supa().auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) return new Map();
-    const { data, error } = await supa().from('planner_item_members').select('item_id, role').eq('user_id', uid);
+    if (!uid) return { roles: new Map(), memberCounts: new Map() };
+    const { data, error } = await supa().from('planner_item_members').select('item_id, user_id, role');
     if (error) throw error;
-    return new Map((data ?? []).map(m => [m.item_id, m.role]));
+    const roles = new Map();
+    const memberCounts = new Map();
+    for (const m of data ?? []) {
+      memberCounts.set(m.item_id, (memberCounts.get(m.item_id) || 0) + 1);
+      if (m.user_id === uid) roles.set(m.item_id, m.role);
+    }
+    return { roles, memberCounts };
   } catch {
-    return new Map();
+    return { roles: new Map(), memberCounts: new Map() };
   }
 }
 
 export async function loadItems() {
   // Independent queries (different tables, no data dependency) - run them
   // together rather than paying two sequential round trips.
-  const [{ data, error }, roles] = await Promise.all([
+  const [{ data, error }, { roles, memberCounts }] = await Promise.all([
     supa().from(TABLE).select(COLUMNS),
-    loadRoles(),
+    loadMembership(),
   ]);
   if (error) throw error;
-  items = (data ?? []).map(r => ({ ...fromRow(r), role: roles.get(r.id) || 'owner' }));
+  items = (data ?? []).map(r => ({
+    ...fromRow(r),
+    role: roles.get(r.id) || 'owner',
+    sharedWithOthers: (memberCounts.get(r.id) || 1) > 1,
+  }));
   saved = new Map(items.map(t => [t.id, stamp(t)]));
   return items;
 }

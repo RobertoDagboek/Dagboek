@@ -161,9 +161,11 @@ export function renderToday() {
   const goalsLater = items.filter(x => x.kind === 'goal' && !x.finished && daysBetween(today, x.deadline) > 3)
     .sort((a, b) => a.deadline.localeCompare(b.deadline));
 
-  const todays = items.filter(x => x.kind === 'task' && (appliesOnDate(x, today) || isCarried(x)) && matchesContext(x));
-  todays.sort(todayOrder(today));
-  const doneCount = todays.filter(x => isDoneOnDate(x, today)).length;
+  const todaysAll = items.filter(x => x.kind === 'task' && (appliesOnDate(x, today) || isCarried(x)) && matchesContext(x));
+  // Split out anything shared (either direction) into its own group, the
+  // same way Ongoing already sits apart from plain Tasks.
+  const sharedTodays = todaysAll.filter(isShared).sort(todayOrder(today));
+  const plainTodays = todaysAll.filter(x => !isShared(x)).sort(todayOrder(today));
 
   let html = contextFilterHtml();
 
@@ -186,8 +188,16 @@ export function renderToday() {
     html += goalsLater.map(ongoingGoalHtml).join('');
   }
 
-  html += `<div class="section-title">Tasks &nbsp;&middot;&nbsp; ${doneCount}/${todays.length}</div><div class="group">`;
-  html += todays.length ? todays.map(x => taskRowHtml(x, today)).join('') : `<div class="empty-note">Nothing on your plate today. Tap + to add something.</div>`;
+  if (sharedTodays.length) {
+    const sharedDone = sharedTodays.filter(x => isDoneOnDate(x, today)).length;
+    html += `<div class="section-title">Shared &nbsp;&middot;&nbsp; ${sharedDone}/${sharedTodays.length}</div><div class="group">`;
+    html += sharedTodays.map(x => taskRowHtml(x, today)).join('');
+    html += `</div>`;
+  }
+
+  const plainDone = plainTodays.filter(x => isDoneOnDate(x, today)).length;
+  html += `<div class="section-title">Tasks &nbsp;&middot;&nbsp; ${plainDone}/${plainTodays.length}</div><div class="group">`;
+  html += plainTodays.length ? plainTodays.map(x => taskRowHtml(x, today)).join('') : `<div class="empty-note">Nothing on your plate today. Tap + to add something.</div>`;
   html += `</div><div class="status-line" id="statusLine"></div>`;
 
   el.innerHTML = html;
@@ -278,7 +288,7 @@ function taskRowHtml(x, dateStr) {
       <div class="row">
         <button class="check-circle ${done ? 'done' : ''} ${x.flagged ? 'flag-color' : ''}" style="--dot-color:var(--sys-orange)" data-check="${x.id}" aria-label="Toggle done">${done ? ICON_CHECK : ''}</button>
         <div class="row-body" data-body="${x.id}">
-          <div class="row-title ${done ? 'done' : ''}">${x.flagged ? '&#128681; ' : ''}${escapeHtml(x.title)}</div>
+          <div class="row-title ${done ? 'done' : ''}">${x.flagged ? '&#128681; ' : ''}${sharedTitleIcon(x)}${escapeHtml(x.title)}</div>
           ${x.notes ? `<div class="row-notes">${escapeHtml(x.notes)}</div>` : ''}
           ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
         </div>
@@ -616,7 +626,7 @@ function dayRowHtml(x, dateStr) {
   return `<div class="row week-task-row">
       <button class="check-circle ${done ? 'done' : ''}" data-check="${x.id}" aria-label="Toggle done">${done ? ICON_CHECK : ''}</button>
       <div class="row-body" data-body="${x.id}">
-        <div class="row-title ${done ? 'done' : ''}">${x.flagged ? '&#128681; ' : ''}${escapeHtml(x.title)}</div>
+        <div class="row-title ${done ? 'done' : ''}">${x.flagged ? '&#128681; ' : ''}${sharedTitleIcon(x)}${escapeHtml(x.title)}</div>
         ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
       </div>
       ${canDelete(x) ? `<button class="row-del" data-del="${x.id}" aria-label="Delete">${ICON_TRASH}</button>` : ''}
@@ -830,7 +840,7 @@ function inboxRowHtml(x) {
   if (shareChip) meta.push(shareChip);
   return `<div class="row">
       <div class="row-body" data-body="${x.id}">
-        <div class="row-title">${escapeHtml(x.title)}</div>
+        <div class="row-title">${sharedTitleIcon(x)}${escapeHtml(x.title)}</div>
         ${meta.length ? `<div class="row-meta">${meta.join('')}</div>` : ''}
       </div>
       ${canEdit(x) ? `<button class="link" data-movetoday="${x.id}" type="button">Today</button>
@@ -923,8 +933,13 @@ function sharedChip(x) {
   const role = x.role || 'owner';
   if (role === 'viewer') return `<span class="meta-chip shared-chip">&#128274; view only</span>`;
   if (role === 'editor') return `<span class="meta-chip shared-chip">&#128101; shared</span>`;
+  if (x.sharedWithOthers) return `<span class="meta-chip shared-chip">&#128279; shared</span>`;
   return '';
 }
+/** True whether it was shared to you, or you shared it out - either way, worth a marker next to its name. */
+export function isShared(x) { return (x.role && x.role !== 'owner') || !!x.sharedWithOthers; }
+/** The small link icon shown right before a shared item's title. */
+function sharedTitleIcon(x) { return isShared(x) ? '&#128279; ' : ''; }
 
 /** How many of a checklist's items are ticked, for the row-meta chip. */
 function checklistProgressChip(x) {
@@ -986,10 +1001,21 @@ export function openCaptureSheet(preferred) {
     <div id="capExtra">${capExtraHtml()}</div>
     <div class="sheet-actions">
       <button class="sheet-cancel" id="capCancel" type="button">Cancel</button>
+      <button class="sheet-cancel" id="capShare" type="button">Share</button>
       <button class="sheet-save" id="capSave" type="button">Add</button>
     </div>`;
 
   $('capCancel').addEventListener('click', closeSheet);
+  $('capShare').addEventListener('click', async () => {
+    const built = buildAndSaveCapturedItem();
+    if (!built) return;
+    refresh();
+    // Wait for the item to actually reach the database before offering to
+    // invite anyone to it - an invite's item_id has to point at a row that
+    // already exists there.
+    await built.ready;
+    openShareView(built.item);
+  });
   wireDescField($('capDescWrap'), capDesc, 'Add a description (optional)…');
   document.querySelectorAll('[data-area]').forEach(b => b.addEventListener('click', e => {
     capArea = e.currentTarget.getAttribute('data-area');
@@ -1067,11 +1093,18 @@ function wireCapExtra() {
   if (capArea === 'goal') wireDateStrip('capDeadline', addDays(TODAY(), 14), TODAY());
 }
 
-function submitCapture() {
+/**
+ * Validates the capture sheet, creates and saves the item, and returns it -
+ * shared by "Add" (which then just closes) and "Share" (which needs the
+ * saved item's real id before an invite can point at it). Returns null
+ * (and leaves the sheet as-is, or closes it for the diary special case)
+ * when there is nothing to hand back.
+ */
+function buildAndSaveCapturedItem() {
   const titleInput = $('capTitle');
   const title = titleInput.value.trim();
-  if (!title) { titleInput.focus(); return; }
-  if (!capArea) { document.querySelector('.cap-area-label').style.color = 'var(--sys-red)'; return; }
+  if (!title) { titleInput.focus(); return null; }
+  if (!capArea) { document.querySelector('.cap-area-label').style.color = 'var(--sys-red)'; return null; }
 
   const time = getTimePickerValue('capTime');
   const recurring = $('capRepeat') ? $('capRepeat').value : 'none';
@@ -1084,21 +1117,29 @@ function submitCapture() {
   if (capArea === 'diary') {
     closeSheet();
     openDiaryDate(TODAY(), title);
-    return;
+    return null;
   }
 
+  let item;
   if (capArea === 'today') {
-    items.push(newTask({ title, notes, notesMode, checklist, estimate, date: TODAY(), time, recurring, repeatDays, flagged, context }));
+    item = newTask({ title, notes, notesMode, checklist, estimate, date: TODAY(), time, recurring, repeatDays, flagged, context });
   } else if (capArea === 'week') {
-    items.push(newTask({ title, notes, notesMode, checklist, estimate, date: getDateStripValue('capWeekDay') || addDays(TODAY(), 1), time, recurring, repeatDays, flagged, context }));
+    item = newTask({ title, notes, notesMode, checklist, estimate, date: getDateStripValue('capWeekDay') || addDays(TODAY(), 1), time, recurring, repeatDays, flagged, context });
   } else if (capArea === 'inbox') {
-    items.push(newTask({ title, notes, notesMode, checklist, context }));
+    item = newTask({ title, notes, notesMode, checklist, context });
   } else if (capArea === 'ongoing') {
-    items.push(newTask({ title, notes, notesMode, checklist, estimate, kind: 'ongoing', context, startedDate: TODAY(), lastTouchedDate: TODAY() }));
+    item = newTask({ title, notes, notesMode, checklist, estimate, kind: 'ongoing', context, startedDate: TODAY(), lastTouchedDate: TODAY() });
   } else if (capArea === 'goal') {
-    items.push(newTask({ title, notes, notesMode, checklist, kind: 'goal', deadline: getDateStripValue('capDeadline') || addDays(TODAY(), 14) }));
+    item = newTask({ title, notes, notesMode, checklist, kind: 'goal', deadline: getDateStripValue('capDeadline') || addDays(TODAY(), 14) });
   }
-  save();
+  items.push(item);
+  const ready = saveItems({ onError: () => setStatus('Could not save just now — will retry on the next change.') });
+  return { item, ready };
+}
+
+function submitCapture() {
+  const built = buildAndSaveCapturedItem();
+  if (!built) return;
   refresh();
   closeSheet();
 }
@@ -1167,7 +1208,8 @@ function editorActionsHtml(role) {
 function editorHtml(x, role) {
   const actions = editorActionsHtml(role);
   const shareBtn = role === 'owner' ? `<button class="link share-btn" id="openShare" type="button">&#128279; Share</button>` : '';
-  const banner = role === 'editor' ? `<div class="share-banner">&#128101; Shared with you &middot; you can edit, not delete</div>` : '';
+  const banner = role === 'editor' ? `<div class="share-banner">&#128101; Shared with you &middot; you can edit, not delete</div>`
+    : (role === 'owner' && x.sharedWithOthers) ? `<div class="share-banner">&#128279; Shared &middot; tap Share to see with who</div>` : '';
 
   if (x.kind === 'goal') {
     return `<div class="sheet-handle"></div>
@@ -1308,7 +1350,9 @@ const SHARE_KINDS = [
 function shareKindLabel(k) { return SHARE_KINDS.find(s => s.id === k)?.label || k; }
 
 function shareViewHtml(x, invites) {
-  const pending = invites.filter(i => i.item_id === x.id && i.status === 'pending');
+  const mine = invites.filter(i => i.item_id === x.id);
+  const pending = mine.filter(i => i.status === 'pending');
+  const accepted = mine.filter(i => i.status === 'accepted');
   return `<div class="sheet-handle"></div>
     <div class="sheet-title">Share &ldquo;${escapeHtml(x.title)}&rdquo;</div>
     <input type="text" id="shareUsername" placeholder="Their username">
@@ -1318,6 +1362,14 @@ function shareViewHtml(x, invites) {
           <span class="share-kind-body"><span class="share-kind-label">${k.label}</span><span class="share-kind-hint">${k.hint}</span></span>
         </label>`).join('')}
     </div>
+    ${accepted.length ? `<div class="cap-area-label">Currently shared with</div><div class="group">
+        ${accepted.map(i => `<div class="row">
+            <div class="row-body">
+              <div class="row-title">${escapeHtml(i.to_username || 'someone')}</div>
+              <div class="row-meta"><span class="meta-chip">${shareKindLabel(i.share_kind)}</span></div>
+            </div>
+          </div>`).join('')}
+      </div>` : ''}
     ${pending.length ? `<div class="cap-area-label">Waiting to be accepted</div><div class="group">
         ${pending.map(i => `<div class="row">
             <div class="row-body">
