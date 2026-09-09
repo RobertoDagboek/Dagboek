@@ -184,17 +184,30 @@ export function saveItems({ onError } = {}) {
  * auth.uid() as null, `user_id = auth.uid()` is never true, and it comes
  * back as an unhelpful-looking "row-level security policy" violation.
  */
+/**
+ * Also returns a short diagnostic of what it found/did, so that if a write
+ * still fails right after this ran clean, the failure message can say
+ * whether the session even existed, how stale it was, and whether a
+ * refresh was attempted and what happened to it - rather than staying a
+ * black box if the token turns out not to be the whole story.
+ */
 async function ensureFreshSession() {
   try {
-    const { data: { session } } = await supa().auth.getSession();
-    if (!session) return;
-    const msLeft = (session.expires_at ?? 0) * 1000 - Date.now();
-    if (msLeft < 60_000) await supa().auth.refreshSession();
-  } catch { /* best effort - a real write failure surfaces its own error */ }
+    const { data: { session }, error } = await supa().auth.getSession();
+    if (error) return `getSession error: ${error.message}`;
+    if (!session) return 'no local session at all';
+    const minsLeft = Math.round(((session.expires_at ?? 0) * 1000 - Date.now()) / 60000);
+    if (minsLeft >= 1) return `token had ${minsLeft}m left, no refresh needed`;
+    const { error: refreshErr } = await supa().auth.refreshSession();
+    if (refreshErr) return `token had ${minsLeft}m left, refresh FAILED: ${refreshErr.message}`;
+    return `token had ${minsLeft}m left, refreshed OK`;
+  } catch (e) {
+    return `session check threw: ${e?.message || e}`;
+  }
 }
 
 async function flush(onError) {
-  await ensureFreshSession();
+  const sessionNote = await ensureFreshSession();
 
   const changed = [];
   const seen = new Set();
@@ -247,6 +260,11 @@ async function flush(onError) {
 
   // Only reported if something is still genuinely unsaved after every
   // retry - a batch failing but every row then succeeding individually is
-  // not an error worth surfacing, just a slower path that worked.
-  if (stuckError) onError?.(stuckError);
+  // not an error worth surfacing, just a slower path that worked. The
+  // session note rides along so a failure right after a clean session
+  // check says so plainly, instead of leaving the token theory unconfirmed.
+  if (stuckError) {
+    stuckError.message = `${stuckError.message} [session: ${sessionNote}]`;
+    onError?.(stuckError);
+  }
 }
