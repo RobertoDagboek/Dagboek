@@ -27,7 +27,7 @@ import {
 import {
   renderToday, renderWeek, renderGoals, renderInbox, openPlannerEditor,
   openCaptureSheet, inboxCount, goalsSoonCount, monthCursorLabel,
-  loadInvites, pendingInviteCount,
+  loadInvites, pendingInviteCount, retryPendingSaves,
 } from './planner/planner.js';
 import { maybeBrief, openBriefing } from './planner/briefing.js';
 import {
@@ -152,6 +152,11 @@ function wireChrome() {
 
   document.addEventListener('app:refresh', renderAll);
   document.addEventListener('app:badges', renderTabBar);
+  // A save that failed silently (a bad-connection moment) would otherwise
+  // only ever retry if the user happens to edit that exact item again -
+  // catch it as soon as the connection or the app itself comes back.
+  window.addEventListener('online', retryPendingSaves);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) retryPendingSaves(); });
   navigator.serviceWorker?.addEventListener('message', e => {
     if (e.data?.type === 'notification') openFromUrl(e.data.url);
   });

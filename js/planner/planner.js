@@ -103,7 +103,28 @@ export function goalsSoonCount() {
 }
 export function monthCursorLabel() { return fmtMonthYear(monthCursor || monthStart(TODAY())); }
 
-function save() { saveItems({ onError: () => setStatus('Could not save just now — will retry on the next change.') }); }
+function save() {
+  saveItems({
+    onError: () => {
+      setStatus('Could not save just now — will retry automatically.');
+      // A subtle status-line message is easy to miss entirely, and a task
+      // that never actually reached the server (a bad-connection moment)
+      // then looks completely normal - shareable, editable - while nothing
+      // it does can ever succeed server-side. A toast at least says so.
+      toast("Couldn't save that — will keep trying. Check your connection.");
+    },
+  });
+}
+
+/**
+ * Nudges a save attempt without needing an actual edit first - saveItems()
+ * only sends whatever currently differs from the last confirmed save, so
+ * this is harmless (and near-free) to call when nothing is actually
+ * pending. Meant to be called from outside this module when the network
+ * or app visibility changes, to pick up anything that failed silently
+ * earlier rather than waiting on the user to happen to edit it again.
+ */
+export function retryPendingSaves() { save(); }
 function setStatus(msg) { const el = $('statusLine'); if (el) el.textContent = msg; }
 
 function recurringLabel(t2) {
