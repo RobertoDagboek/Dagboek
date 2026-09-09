@@ -132,6 +132,7 @@ async function loadMembership() {
 }
 
 export async function loadItems() {
+  await ensureFreshSession();
   // Independent queries (different tables, no data dependency) - run them
   // together rather than paying two sequential round trips.
   const [{ data, error }, { roles, memberCounts }] = await Promise.all([
@@ -172,7 +173,29 @@ export function saveItems({ onError } = {}) {
   });
 }
 
+/**
+ * Makes sure the login token isn't stale before writing anything with it.
+ * supabase-js refreshes it automatically in the background, but that is a
+ * timer running in the page - a phone that was locked or backgrounded for a
+ * while can resume with a token that already expired (or is seconds from
+ * expiring) before that timer has caught up, especially the moment a save
+ * fires right on the app becoming visible again. A write attempted with a
+ * dead token isn't rejected as "please log in again" - RLS just sees
+ * auth.uid() as null, `user_id = auth.uid()` is never true, and it comes
+ * back as an unhelpful-looking "row-level security policy" violation.
+ */
+async function ensureFreshSession() {
+  try {
+    const { data: { session } } = await supa().auth.getSession();
+    if (!session) return;
+    const msLeft = (session.expires_at ?? 0) * 1000 - Date.now();
+    if (msLeft < 60_000) await supa().auth.refreshSession();
+  } catch { /* best effort - a real write failure surfaces its own error */ }
+}
+
 async function flush(onError) {
+  await ensureFreshSession();
+
   const changed = [];
   const seen = new Set();
 
