@@ -116,7 +116,7 @@ export function readVideo(file) {
       }
     };
 
-    v.onerror = () => done({ poster: null, width: 0, height: 0, duration: 0 });
+    v.addEventListener('error', () => done({ poster: null, width: 0, height: 0, duration: 0 }));
 
     v.src = url;
   });

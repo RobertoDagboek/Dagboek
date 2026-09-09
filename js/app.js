@@ -309,7 +309,13 @@ async function offerBiometric() {
   const usable = bio.isEnrolled() && await bio.isAvailable();
   btn.hidden = !usable || pin.mode !== 'unlock';
   if (!usable) return;
-  btn.onclick = async () => {
+  // Unlike the rest of the app's sheets, the lock screen is static markup in
+  // index.html, never rebuilt via innerHTML - offerBiometric() runs again on
+  // every startLogin() (switching accounts, retrying), so without this guard
+  // the same persistent button would pick up one more listener each time.
+  if (btn.dataset.wired) return;
+  btn.dataset.wired = '1';
+  btn.addEventListener('click', async () => {
     $('pin-msg').textContent = '';
     try {
       const value = await bio.unlock();
@@ -319,7 +325,7 @@ async function offerBiometric() {
     } catch {
       $('pin-msg').textContent = 'Face ID did not work. Use your PIN.';
     }
-  };
+  });
 }
 
 function startLogin({ mode, newUser = '' }) {
@@ -682,14 +688,14 @@ async function wireNotifyToggle() {
   };
   await paint();
 
-  toggle.onclick = async () => {
+  toggle.addEventListener('click', async () => {
     const st = await push.status();
     if (st === 'on') { await push.disable(); await paint(); return; }
     if (st !== 'off') { await paint(); return; }
     try { await push.enable(); toast('Notifications on'); }
     catch (e) { hint.textContent = e.message; }
     await paint();
-  };
+  });
 }
 
 async function wireBiometricToggle() {
@@ -716,7 +722,7 @@ async function wireBiometricToggle() {
   };
   paint();
 
-  toggle.onclick = async () => {
+  toggle.addEventListener('click', async () => {
     if (bio.isEnrolled()) { bio.forget(); paint(); return; }
     if (!livePin) { hint.textContent = 'Sign out and back in first, so the PIN can be stored.'; return; }
     try {
@@ -726,7 +732,7 @@ async function wireBiometricToggle() {
     } catch {
       hint.textContent = 'Could not set up Face ID.';
     }
-  };
+  });
 }
 
 async function renameAccount() {
