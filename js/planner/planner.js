@@ -105,13 +105,17 @@ export function monthCursorLabel() { return fmtMonthYear(monthCursor || monthSta
 
 function save() {
   saveItems({
-    onError: () => {
+    onError: e => {
       setStatus('Could not save just now — will retry automatically.');
       // A subtle status-line message is easy to miss entirely, and a task
       // that never actually reached the server (a bad-connection moment)
       // then looks completely normal - shareable, editable - while nothing
-      // it does can ever succeed server-side. A toast at least says so.
-      toast("Couldn't save that — will keep trying. Check your connection.");
+      // it does can ever succeed server-side. A toast at least says so -
+      // and shows the real reason, not a generic message, since "the
+      // connection" is a guess: it could just as easily be the database
+      // itself refusing the write.
+      const reason = e?.message || e?.code || 'unknown reason';
+      toast(`Couldn't save that (${reason}) — will keep trying.`);
     },
   });
 }

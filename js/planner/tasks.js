@@ -185,7 +185,7 @@ async function flush(onError) {
 
   if (!changed.length && !removed.length) return;
 
-  let stuck = false;
+  let stuckError = null;
 
   if (changed.length) {
     try {
@@ -199,14 +199,14 @@ async function flush(onError) {
       // forever and drag every future save down with it, since it is
       // re-included in every batch until something marks it saved. Retrying
       // the rest one row at a time keeps everything else saving; only the
-      // genuinely stuck row(s) keep retrying (harmlessly) after this.
+      // genuinely stuck row(s) still count as an error below.
       for (const t of changed) {
         try {
           const { error } = await supa().from(TABLE).upsert(toRow(t), { onConflict: 'id' });
           if (error) throw error;
           saved.set(t.id, stamp(t));
-        } catch {
-          stuck = true;
+        } catch (rowErr) {
+          stuckError = rowErr;
         }
       }
     }
@@ -217,10 +217,13 @@ async function flush(onError) {
       const { error } = await supa().from(TABLE).delete().in('id', removed);
       if (error) throw error;
       for (const id of removed) saved.delete(id);
-    } catch {
-      stuck = true;
+    } catch (delErr) {
+      stuckError = delErr;
     }
   }
 
-  if (stuck) onError?.(new Error('Could not save everything just now.'));
+  // Only reported if something is still genuinely unsaved after every
+  // retry - a batch failing but every row then succeeding individually is
+  // not an error worth surfacing, just a slower path that worked.
+  if (stuckError) onError?.(stuckError);
 }
