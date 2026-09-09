@@ -90,6 +90,31 @@
     };
     return origAdd.call(this, type, wrapped, opts);
   };
+
+  // Same idea for timers/animation frames - a spring animation, the save
+  // debounce, or the periodic retry safety net all run through these, not
+  // through addEventListener, so a crash inside one of them was still
+  // falling through to the muted window.onerror above ("Script error."
+  // with no detail) instead of being wrapped like a tap handler is.
+  function wrapTimer(name) {
+    var orig = window[name];
+    window[name] = function (cb) {
+      var rest = Array.prototype.slice.call(arguments, 1);
+      if (typeof cb !== 'function') return orig.apply(window, [cb].concat(rest));
+      var wrapped = function () {
+        try { return cb.apply(this, arguments); }
+        catch (err) {
+          show('Error in ' + name + ' callback: ' + (err && err.message ? err.message : String(err))
+            + (err && err.stack ? '\n' + err.stack : ''));
+          throw err;
+        }
+      };
+      return orig.apply(window, [wrapped].concat(rest));
+    };
+  }
+  wrapTimer('setTimeout');
+  wrapTimer('setInterval');
+  wrapTimer('requestAnimationFrame');
 })();
 </script>
 
