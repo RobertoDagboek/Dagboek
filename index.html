@@ -22,7 +22,18 @@
 <!-- Temporary diagnostic: shows any uncaught error on screen instead of the
      app just going quiet, so it can be screenshotted. Registered before
      anything else loads, so it catches a failure in app.js itself too.
-     Safe to remove once the "stuck when opening a task" bug is found. -->
+     Safe to remove once the real cause of the "opening a task"/"switching
+     days" crash is confirmed fixed.
+
+     window.onerror alone was not enough - on the device that actually hit
+     this, it only ever reported "Script error." with no file/line/stack.
+     That is Safari deliberately withholding real detail from a global
+     error *event* it considers cross-origin-tainted (a known quirk with
+     scripts served through a Service Worker, even same-origin). A plain
+     try/catch inside the code that threw is never subject to that muting -
+     it always sees the real Error object - so every DOM event listener
+     added anywhere in the app is wrapped below to catch (and fully report)
+     whatever it throws, sync or async, instead of relying on the event. -->
 <div id="err-panel" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(20,0,0,0.96);color:#fff;padding:20px;overflow:auto;font:13px/1.5 -apple-system,sans-serif;white-space:pre-wrap;"></div>
 <script>
 (function () {
@@ -34,11 +45,16 @@
       + '\n\n(tap anywhere to close this panel)';
     el.style.display = 'block';
   }
+  window.__reportCrash = show;
+
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('err-panel').addEventListener('click', function () {
       this.style.display = 'none';
     });
   });
+
+  // Fallback net for anything that isn't inside a listener this page wraps
+  // below (a bare setTimeout callback, a syntax error while loading, etc).
   window.addEventListener('error', function (e) {
     show('Error: ' + e.message + '\nAt: ' + (e.filename || '?') + ':' + (e.lineno || '?') + ':' + (e.colno || '?')
       + (e.error && e.error.stack ? '\n' + e.error.stack : ''));
@@ -48,6 +64,32 @@
     show('Unhandled promise rejection: ' + (r && r.message ? r.message : String(r))
       + (r && r.stack ? '\n' + r.stack : ''));
   });
+
+  // The real fix for muted errors: every addEventListener call, anywhere in
+  // the app (this file, index.html's own inline listeners, and every JS
+  // module loaded after it), gets its listener wrapped in try/catch. A tap
+  // that crashes now reports the true message and stack instead of nothing.
+  var origAdd = EventTarget.prototype.addEventListener;
+  EventTarget.prototype.addEventListener = function (type, listener, opts) {
+    if (typeof listener !== 'function') return origAdd.call(this, type, listener, opts);
+    var wrapped = function (event) {
+      try {
+        var result = listener.apply(this, arguments);
+        if (result && typeof result.then === 'function') {
+          result.catch(function (err) {
+            show('Error in async "' + type + '" handler: ' + (err && err.message ? err.message : String(err))
+              + (err && err.stack ? '\n' + err.stack : ''));
+          });
+        }
+        return result;
+      } catch (err) {
+        show('Error in "' + type + '" handler: ' + (err && err.message ? err.message : String(err))
+          + (err && err.stack ? '\n' + err.stack : ''));
+        throw err;
+      }
+    };
+    return origAdd.call(this, type, wrapped, opts);
+  };
 })();
 </script>
 
