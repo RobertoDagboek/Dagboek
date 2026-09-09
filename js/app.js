@@ -235,8 +235,13 @@ function wirePressFeedback() {
 
 function switchScreen(name, seed) {
   screen = name;
-  window.scrollTo(0, 0);
+  // Render first, scroll after: scrolling while the old screen's content is
+  // still on-screen right before it gets replaced is what let Safari catch
+  // a frame mid-transition on iOS - seen as the old and new screen briefly
+  // painted on top of each other (most visible on the Calendar grid, where
+  // two month grids showed up overlapping).
   renderAll(seed);
+  window.scrollTo(0, 0);
 }
 
 function renderTabBar() {
@@ -273,6 +278,12 @@ function renderAll(seed) {
   else if (screen === 'diary') renderDiary(typeof seed === 'string' ? seed : undefined);
   else if (screen === 'goals') renderGoals();
   else if (screen === 'inbox') renderInbox();
+  // Forces a synchronous layout pass, which also forces a real repaint -
+  // iOS Safari can otherwise leave an already-painted frame of the old
+  // screen visibly stuck on top of the new one after a full content swap
+  // like this (position: sticky header + wholesale innerHTML replacement
+  // is exactly the combination known to trigger it).
+  void document.body.offsetHeight;
 }
 
 /* ===================== PIN lock ===================== */
