@@ -157,6 +157,10 @@ function wireChrome() {
   // catch it as soon as the connection or the app itself comes back.
   window.addEventListener('online', retryPendingSaves);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) retryPendingSaves(); });
+  // A true safety net on top of both of those: neither event is guaranteed
+  // to fire for every kind of connectivity hiccup (a request that times out
+  // without the browser ever reporting "offline", say), so poll as well.
+  setInterval(retryPendingSaves, 20000);
   navigator.serviceWorker?.addEventListener('message', e => {
     if (e.data?.type === 'notification') openFromUrl(e.data.url);
   });
