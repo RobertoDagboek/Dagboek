@@ -81,10 +81,24 @@ create policy "see members of your items" on public.planner_item_members
 
 drop policy if exists "own planner" on public.planner_items;
 
+-- `user_id = auth.uid()` is checked directly, not only through
+-- planner_role(id), because a brand-new row's owner membership row is
+-- written by planner_items_after_insert (a trigger on THIS table, firing
+-- on a DIFFERENT one) - and a client asking for the row back on create
+-- (which the Supabase client library does even without asking for it
+-- explicitly) needs this select policy to pass for that same brand-new
+-- row, in the same command that inserted it. Depending solely on the
+-- trigger's membership row being visible yet made that fail outright:
+-- "new row violates row-level security policy for table planner_items"
+-- on every single new item, confirmed by testing the exact insert
+-- directly in SQL - it failed with a `returning` clause and succeeded
+-- immediately without one, pinning the cause to this exact gap. Checking
+-- the row's own user_id needs nothing from any other table, so it can
+-- never be subject to that timing gap.
 drop policy if exists "planner select" on public.planner_items;
 create policy "planner select" on public.planner_items
   for select
-  using (public.planner_role(id) is not null);
+  using (user_id = auth.uid() or public.planner_role(id) is not null);
 
 drop policy if exists "planner insert" on public.planner_items;
 create policy "planner insert" on public.planner_items
