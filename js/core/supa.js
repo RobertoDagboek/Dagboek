@@ -136,6 +136,11 @@ export async function sendInvite({ itemId, toUsername, shareKind }) {
   });
   if (error) {
     if (error.code === '23505') throw new Error('Already invited.');
+    // 42501 = Postgres' row-level-security rejection. Here specifically it
+    // means the database doesn't currently agree you own this item - most
+    // likely the on-screen copy's role went stale (someone else changed it,
+    // or it was reloaded from an older state) since it was last loaded.
+    if (error.code === '42501') throw new Error("Can't share this — you may not be its owner anymore. Close and reopen it, then try again.");
     throw error;
   }
 }

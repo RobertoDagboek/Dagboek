@@ -1403,6 +1403,10 @@ async function openShareView(x) {
       openShareView(x);
     } catch (e) {
       toast(e.message || 'Could not send that invite.');
+      // The database just disagreed with what this screen assumed about who
+      // owns the item - refresh from it rather than let the stale local
+      // copy keep offering an action the server will keep rejecting.
+      loadItems().then(refresh).catch(() => {});
     }
   });
   sheetEl().querySelectorAll('[data-cancelinvite]').forEach(b => b.addEventListener('click', async e => {
