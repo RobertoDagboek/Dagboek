@@ -284,6 +284,31 @@ export async function deletePhotoRow(id) {
   if (error) throw error;
 }
 
+/* -------------------------- task photos ---------------------------- */
+// Same shape as the diary photo rows above, on planner_item_photos
+// instead - see migration 016 for why that's a separate table/path.
+
+export async function listTaskPhotos(itemId) {
+  const { data, error } = await supa()
+    .from('planner_item_photos')
+    .select('id, item_id, path, width, height, bytes, mime, sort, created_at')
+    .eq('item_id', itemId)
+    .order('sort', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function addTaskPhotoRow(row) {
+  const { data, error } = await supa().from('planner_item_photos').insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteTaskPhotoRow(id) {
+  const { error } = await supa().from('planner_item_photos').delete().eq('id', id);
+  if (error) throw error;
+}
+
 /* ------------------------------ files ----------------------------- */
 
 export async function uploadFile(path, blob, contentType) {
@@ -316,4 +341,9 @@ export async function fileUrl(path, seconds = 3600) {
 /** Path prefix that the storage policies check: <user-id>/<date>/ */
 export function userPath(userId, date, filename) {
   return `${userId}/${date}/${filename}`;
+}
+
+/** Path prefix the *task photo* storage policies check: tasks/<item-id>/ */
+export function taskPhotoPath(itemId, filename) {
+  return `tasks/${itemId}/${filename}`;
 }

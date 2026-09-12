@@ -20,8 +20,13 @@ import {
   dayTogglesHtml, wireDayToggles, getDayToggles, dayNames,
   sheetEl, openSheet, closeSheet, toast, refresh,
 } from '../core/ui.js';
-import { diaryDatesInRange, openDiaryDate } from '../diary/diary.js';
-import { sendInvite, myInvites, respondToInvite, cancelInvite, currentUserId } from '../core/supa.js';
+import { diaryDatesInRange, openDiaryDate, closeViewer } from '../diary/diary.js';
+import { preparePhoto, localPreview } from '../diary/photos.js';
+import {
+  sendInvite, myInvites, respondToInvite, cancelInvite, currentUserId,
+  listTaskPhotos, addTaskPhotoRow, deleteTaskPhotoRow, taskPhotoPath,
+  uploadFile, removeFiles, fileUrl,
+} from '../core/supa.js';
 
 /** Invites waiting on you to accept or decline - see loadInvites(). */
 let receivedInvites = [];
@@ -1169,6 +1174,119 @@ function submitCapture() {
   closeSheet();
 }
 
+/* ===================== photos on a task/goal/ongoing item ===================== */
+// Reuses the diary's exact upload pipeline (preparePhoto/localPreview) and
+// the app's one shared full-screen #viewer - just a different table/path
+// underneath (see migration 016: entry_photos.entry_id is uuid, this
+// item's id is text, so it can't be the same table).
+
+function photoSectionHtml(canManage) {
+  return `<div class="cap-area-label">Photos</div>
+    <div class="photo-grid" id="photoGrid"></div>
+    ${canManage ? `<input type="file" id="photoInput" accept="image/*" multiple hidden>
+      <button class="link" id="photoAddBtn" type="button">+ Add photo</button>` : ''}`;
+}
+
+function openImageViewer(url) {
+  const body = $('viewer-body');
+  body.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = url;
+  body.appendChild(img);
+  $('viewer').hidden = false;
+}
+
+function photoTileHtml(row) {
+  return `<div class="photo is-open" data-photoid="${row.id}" data-path="${escapeHtml(row.path)}">
+      <img loading="lazy">
+    </div>`;
+}
+
+/** Wires a tile already in the DOM: tap to view, and (if canManage) the remove button. */
+function wirePhotoTile(tile, canManage) {
+  const path = tile.getAttribute('data-path');
+  const id = tile.getAttribute('data-photoid');
+  fileUrl(path).then(url => { if (url) tile.querySelector('img').src = url; });
+  tile.addEventListener('click', e => {
+    if (e.target.closest('.x')) return;
+    const src = tile.querySelector('img').src;
+    if (src) openImageViewer(src);
+  });
+  if (canManage) {
+    const del = document.createElement('button');
+    del.className = 'x'; del.type = 'button'; del.setAttribute('aria-label', 'Remove');
+    del.innerHTML = '&times;';
+    del.addEventListener('click', async e => {
+      e.stopPropagation();
+      tile.remove();
+      try { await deleteTaskPhotoRow(id); await removeFiles([path]); }
+      catch { toast('Could not remove that photo.'); }
+    });
+    tile.appendChild(del);
+  }
+}
+
+async function loadAndRenderPhotos(x, canManage) {
+  const grid = $('photoGrid');
+  if (!grid) return;
+  let rows = [];
+  try { rows = await listTaskPhotos(x.id); } catch { rows = []; }
+  // The sheet may already be closed, or a fresh upload may have landed
+  // its own tile, by the time this network call resolves.
+  if (!$('photoGrid')) return;
+  grid.innerHTML = rows.map(photoTileHtml).join('');
+  grid.querySelectorAll('[data-photoid]').forEach(tile => wirePhotoTile(tile, canManage));
+}
+
+function wirePhotoAdd(x) {
+  const addBtn = $('photoAddBtn');
+  const input = $('photoInput');
+  if (!addBtn || !input) return;
+  addBtn.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const files = [...input.files];
+    input.value = '';
+    for (const file of files) await uploadOneTaskPhoto(x, file);
+  });
+}
+
+async function uploadOneTaskPhoto(x, file) {
+  const grid = $('photoGrid');
+  if (!grid) return;
+  const preview = localPreview(file);
+  const tile = document.createElement('div');
+  tile.className = 'photo is-busy';
+  tile.innerHTML = `<img src="${preview}">`;
+  grid.appendChild(tile);
+  try {
+    const prep = await preparePhoto(file);
+    const filename = `foto-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}.jpg`;
+    const path = taskPhotoPath(x.id, filename);
+    await uploadFile(path, prep.blob, 'image/jpeg');
+    const row = await addTaskPhotoRow({
+      item_id: x.id, path, width: prep.width, height: prep.height, bytes: prep.blob.size, mime: 'image/jpeg',
+    });
+    tile.className = 'photo is-open';
+    tile.setAttribute('data-photoid', row.id);
+    tile.setAttribute('data-path', path);
+    tile.addEventListener('click', e => { if (!e.target.closest('.x')) openImageViewer(preview); });
+    const del = document.createElement('button');
+    del.className = 'x'; del.type = 'button'; del.setAttribute('aria-label', 'Remove');
+    del.innerHTML = '&times;';
+    del.addEventListener('click', async e => {
+      e.stopPropagation();
+      tile.remove();
+      try { await deleteTaskPhotoRow(row.id); await removeFiles([path]); }
+      catch { toast('Could not remove that photo.'); }
+    });
+    tile.appendChild(del);
+  } catch {
+    tile.remove();
+    URL.revokeObjectURL(preview);
+    toast('Could not upload that photo.');
+  }
+}
+
 /* ===================== editor sheet ===================== */
 
 let editDesc = { mode: 'text', notes: '', checklist: [] };
@@ -1181,13 +1299,16 @@ export function openPlannerEditor(id) {
     sheetEl().innerHTML = viewerEditorHtml(x);
     $('sheetCancel').addEventListener('click', closeSheet);
     openSheet();
+    loadAndRenderPhotos(x, false);
     return;
   }
   editDesc = { mode: x.notesMode === 'checklist' ? 'checklist' : 'text', notes: x.notes || '', checklist: (x.checklist || []).map(it => ({ ...it })) };
   sheetEl().innerHTML = editorHtml(x, role);
   wireDescField($('editDescWrap'), editDesc, 'More detail or explanation…');
   wireEditor(x, role);
+  wirePhotoAdd(x);
   openSheet();
+  loadAndRenderPhotos(x, canEdit(x));
 }
 
 function notesFieldHtml() {
@@ -1218,6 +1339,7 @@ function viewerEditorHtml(x) {
     <div class="sheet-title">${escapeHtml(x.title)}</div>
     ${meta.length ? `<div class="row-meta" style="margin-bottom:12px;">${meta.map(m => `<span class="meta-chip">${escapeHtml(m)}</span>`).join('')}</div>` : ''}
     ${body}
+    ${photoSectionHtml(false)}
     <p class="sheet-hint">${done ? `${ICON_CHECK} Marked done.` : 'Not finished yet.'}</p>
     <div class="sheet-actions"><button class="sheet-cancel" id="sheetCancel" type="button">Close</button></div>`;
 }
@@ -1242,6 +1364,7 @@ function editorHtml(x, role) {
       ${banner}
       <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
       ${notesFieldHtml(x)}
+      ${photoSectionHtml(true)}
       <div class="fname" style="margin-bottom:8px;">Deadline</div>
       ${dateStripWrapHtml('editDeadline')}
       ${actions}`;
@@ -1252,6 +1375,7 @@ function editorHtml(x, role) {
       ${banner}
       <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
       ${notesFieldHtml(x)}
+      ${photoSectionHtml(true)}
       <div class="field-group">
         <div class="field-row"><span class="fname">Started</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.startedDate)}</span></div>
         <div class="field-row"><span class="fname">Last touched</span><span style="color:var(--label-secondary);">${fmtMonthDay(x.lastTouchedDate || x.startedDate)}</span></div>
@@ -1267,6 +1391,7 @@ function editorHtml(x, role) {
     ${banner}
     <input type="text" id="editTitle" value="${escapeHtml(x.title)}" maxlength="120">
     ${notesFieldHtml(x)}
+    ${photoSectionHtml(true)}
     <div class="sheet-move-row">
       <button class="sheet-move-btn" id="moveTodayBtn" type="button">Today</button>
       <button class="sheet-move-btn" id="moveTomBtn" type="button">Tomorrow</button>
