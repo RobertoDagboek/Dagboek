@@ -126,10 +126,14 @@ export async function userIdForHandle(username) {
   return data || null;
 }
 
-/** `shareKind` is 'delegate' | 'collaborate' | 'view'. Throws with a message fit to show. */
-export async function sendInvite({ itemId, toUsername, shareKind }) {
-  const toUserId = await userIdForHandle(toUsername);
-  if (!toUserId) throw new Error(`No account is named "${toUsername}".`);
+/**
+ * The actual insert, once a recipient's account id is already known - used
+ * directly for a group send (every member's id is already on file, no
+ * point re-resolving each one by name) and via sendInvite() below for a
+ * plain one-person share. `shareKind` is 'delegate' | 'collaborate' | 'view'.
+ * Throws with a message fit to show.
+ */
+export async function sendInviteToUserId({ itemId, toUserId, shareKind }) {
   if (toUserId === await currentUserId()) throw new Error("That's your own account.");
   const { error } = await supa().from('planner_invites').insert({
     item_id: itemId, to_user_id: toUserId, share_kind: shareKind,
@@ -145,6 +149,12 @@ export async function sendInvite({ itemId, toUsername, shareKind }) {
   }
 }
 
+export async function sendInvite({ itemId, toUsername, shareKind }) {
+  const toUserId = await userIdForHandle(toUsername);
+  if (!toUserId) throw new Error(`No account is named "${toUsername}".`);
+  await sendInviteToUserId({ itemId, toUserId, shareKind });
+}
+
 /** Every invite you have sent or received, whatever its status. */
 export async function myInvites() {
   const { data, error } = await supa()
@@ -153,6 +163,56 @@ export async function myInvites() {
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data ?? [];
+}
+
+/* ------------------------------ groups ------------------------------ */
+// A personal address book for sharing with several people at once - see
+// migration 016. Sending to a group is just one ordinary invite per
+// current member (sendInviteToUserId above), nothing here is a new
+// sharing primitive.
+
+/** Every group you've made, each with its current members attached. */
+export async function myGroups() {
+  const { data, error } = await supa()
+    .from('planner_groups')
+    .select('id, name, created_at, planner_group_members ( user_id, username )')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(g => ({ ...g, members: g.planner_group_members ?? [] }));
+}
+
+export async function createGroup(name) {
+  const { data, error } = await supa().from('planner_groups').insert({ name }).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function renameGroup(groupId, name) {
+  const { error } = await supa().from('planner_groups').update({ name }).eq('id', groupId);
+  if (error) throw error;
+}
+
+export async function deleteGroup(groupId) {
+  const { error } = await supa().from('planner_groups').delete().eq('id', groupId);
+  if (error) throw error;
+}
+
+/** Throws with a message fit to show, same as sendInvite. */
+export async function addGroupMember(groupId, username) {
+  const userId = await userIdForHandle(username);
+  if (!userId) throw new Error(`No account is named "${username}".`);
+  const { error } = await supa().from('planner_group_members')
+    .insert({ group_id: groupId, user_id: userId, username: username.trim().toLowerCase() });
+  if (error) {
+    if (error.code === '23505') throw new Error('Already in this group.');
+    throw error;
+  }
+}
+
+export async function removeGroupMember(groupId, userId) {
+  const { error } = await supa().from('planner_group_members')
+    .delete().eq('group_id', groupId).eq('user_id', userId);
+  if (error) throw error;
 }
 
 export async function respondToInvite(inviteId, accept) {

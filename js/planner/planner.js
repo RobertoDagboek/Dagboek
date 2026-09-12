@@ -23,9 +23,10 @@ import {
 import { diaryDatesInRange, openDiaryDate, closeViewer } from '../diary/diary.js';
 import { preparePhoto, localPreview } from '../diary/photos.js';
 import {
-  sendInvite, myInvites, respondToInvite, cancelInvite, currentUserId,
+  sendInvite, sendInviteToUserId, myInvites, respondToInvite, cancelInvite, currentUserId,
   listTaskPhotos, addTaskPhotoRow, deleteTaskPhotoRow, taskPhotoPath,
   uploadFile, removeFiles, fileUrl,
+  myGroups, createGroup, deleteGroup, addGroupMember, removeGroupMember,
 } from '../core/supa.js';
 
 /** Invites waiting on you to accept or decline - see loadInvites(). */
@@ -1499,7 +1500,7 @@ const SHARE_KINDS = [
 ];
 function shareKindLabel(k) { return SHARE_KINDS.find(s => s.id === k)?.label || k; }
 
-function shareViewHtml(x, invites) {
+function shareViewHtml(x, invites, groups) {
   const mine = invites.filter(i => i.item_id === x.id);
   const pending = mine.filter(i => i.status === 'pending');
   const accepted = mine.filter(i => i.status === 'accepted');
@@ -1512,6 +1513,16 @@ function shareViewHtml(x, invites) {
           <span class="share-kind-body"><span class="share-kind-label">${k.label}</span><span class="share-kind-hint">${k.hint}</span></span>
         </label>`).join('')}
     </div>
+    ${groups.length ? `<div class="cap-area-label">Or send to a group</div><div class="group">
+        ${groups.map(g => `<div class="row">
+            <div class="row-body">
+              <div class="row-title">${escapeHtml(g.name)}</div>
+              <div class="row-meta"><span class="meta-chip">${g.members.length} ${g.members.length === 1 ? 'person' : 'people'}</span></div>
+            </div>
+            <button class="link" data-sendgroup="${g.id}" type="button">Send</button>
+          </div>`).join('')}
+      </div>` : ''}
+    <button class="link" id="manageGroups" type="button">Manage groups</button>
     ${accepted.length ? `<div class="cap-area-label">Currently shared with</div><div class="group">
         ${accepted.map(i => `<div class="row">
             <div class="row-body">
@@ -1536,13 +1547,14 @@ function shareViewHtml(x, invites) {
 }
 
 async function openShareView(x) {
-  let invites = [];
-  try { invites = await myInvites(); } catch { /* best effort - the list just starts empty */ }
-  sheetEl().innerHTML = shareViewHtml(x, invites);
+  let invites = [], groups = [];
+  try { [invites, groups] = await Promise.all([myInvites(), myGroups()]); } catch { /* best effort - the lists just start empty */ }
+  sheetEl().innerHTML = shareViewHtml(x, invites, groups);
 
   // Closes outright rather than looping back into the edit form - from here
   // "Back" read like the only way out was "Cancel" the task itself.
   $('shareDone').addEventListener('click', closeSheet);
+  $('manageGroups').addEventListener('click', () => openGroupsManager(x));
   $('shareSend').addEventListener('click', async () => {
     const toUsername = $('shareUsername').value.trim();
     if (!toUsername) { $('shareUsername').focus(); return; }
@@ -1563,6 +1575,83 @@ async function openShareView(x) {
     try { await cancelInvite(e.currentTarget.getAttribute('data-cancelinvite')); openShareView(x); }
     catch { toast('Could not cancel that invite.'); }
   }));
+  sheetEl().querySelectorAll('[data-sendgroup]').forEach(b => b.addEventListener('click', async e => {
+    const grp = groups.find(g => g.id === e.currentTarget.getAttribute('data-sendgroup'));
+    if (!grp || !grp.members.length) { toast('That group has no members yet.'); return; }
+    const shareKind = sheetEl().querySelector('input[name="shareKind"]:checked')?.value || 'collaborate';
+    let sent = 0;
+    for (const m of grp.members) {
+      try { await sendInviteToUserId({ itemId: x.id, toUserId: m.user_id, shareKind }); sent++; }
+      catch { /* one member at a time - a single failure (already invited, say) shouldn't stop the rest */ }
+    }
+    const failed = grp.members.length - sent;
+    toast(`Sent to ${sent} of ${grp.members.length} in "${grp.name}"${failed ? ' — some may already be invited' : ''}.`);
+    openShareView(x);
+  }));
+}
+
+/* ===================== groups: a personal address book for sharing ===================== */
+// Reuses the same .goal-card/.chip/.tag-input markup already used
+// elsewhere - a group is a list of usernames with a name, nothing here
+// needs a new visual pattern.
+
+function groupCardHtml(g) {
+  return `<div class="goal-card">
+      <div class="goal-top">
+        <div style="flex:1;min-width:0;">
+          <div class="goal-title">${escapeHtml(g.name)}</div>
+          <div class="goal-sub">${g.members.length} ${g.members.length === 1 ? 'person' : 'people'}</div>
+        </div>
+        <button class="link danger" data-deletegroup="${g.id}" type="button">Delete</button>
+      </div>
+      ${g.members.length ? `<div class="chip-row" style="margin-top:10px;">
+        ${g.members.map(m => `<span class="chip">${escapeHtml(m.username || 'someone')}<button data-removemember="${g.id}:${m.user_id}" type="button">&times;</button></span>`).join('')}
+      </div>` : ''}
+      <input type="text" class="tag-input" data-addmember="${g.id}" placeholder="Add by username, then Enter">
+    </div>`;
+}
+
+function groupsManagerHtml(groups) {
+  return `<div class="sheet-handle"></div>
+    <div class="sheet-title">Manage groups</div>
+    <input type="text" id="newGroupName" placeholder="New group name" maxlength="60">
+    <div class="sheet-actions" style="margin-bottom:14px;">
+      <button class="sheet-cancel" id="groupsBack" type="button">Back</button>
+      <button class="sheet-save" id="createGroupBtn" type="button">Create</button>
+    </div>
+    ${groups.length ? groups.map(groupCardHtml).join('') : `<div class="empty-note">No groups yet — create one above.</div>`}`;
+}
+
+async function openGroupsManager(returnItem) {
+  let groups = [];
+  try { groups = await myGroups(); } catch { /* best effort */ }
+  sheetEl().innerHTML = groupsManagerHtml(groups);
+
+  $('groupsBack').addEventListener('click', () => openShareView(returnItem));
+  $('createGroupBtn').addEventListener('click', async () => {
+    const name = $('newGroupName').value.trim();
+    if (!name) { $('newGroupName').focus(); return; }
+    try { await createGroup(name); openGroupsManager(returnItem); }
+    catch { toast('Could not create that group.'); }
+  });
+  sheetEl().querySelectorAll('[data-deletegroup]').forEach(b => b.addEventListener('click', async e => {
+    try { await deleteGroup(e.currentTarget.getAttribute('data-deletegroup')); openGroupsManager(returnItem); }
+    catch { toast('Could not delete that group.'); }
+  }));
+  sheetEl().querySelectorAll('[data-removemember]').forEach(b => b.addEventListener('click', async e => {
+    const [groupId, userId] = e.currentTarget.getAttribute('data-removemember').split(':');
+    try { await removeGroupMember(groupId, userId); openGroupsManager(returnItem); }
+    catch { toast('Could not remove that member.'); }
+  }));
+  sheetEl().querySelectorAll('[data-addmember]').forEach(input => {
+    input.addEventListener('keydown', async e => {
+      if (e.key !== 'Enter') return;
+      const username = input.value.trim();
+      if (!username) return;
+      try { await addGroupMember(input.getAttribute('data-addmember'), username); openGroupsManager(returnItem); }
+      catch (err) { toast(err.message || 'Could not add that member.'); }
+    });
+  });
 }
 
 /* Search results are delegated, because the list is rebuilt as you type. */
